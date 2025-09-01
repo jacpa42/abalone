@@ -1,3 +1,4 @@
+const std = @import("std");
 const rl = @import("raylib");
 const render = @import("render.zig");
 
@@ -14,22 +15,19 @@ pub fn main() anyerror!void {
     //--------------------------------------------------------------------------------------
 
     // Main game loop
-    while (!rl.windowShouldClose()) { // Detect window close button or ESC key
-        // Update
-        //----------------------------------------------------------------------------------
-        // TODO: Update your variables here
-        //----------------------------------------------------------------------------------
+    while (!rl.windowShouldClose()) {
+        {
+            rl.beginDrawing();
+            defer rl.endDrawing();
 
-        // Draw
-        //----------------------------------------------------------------------------------
-        rl.beginDrawing();
-        defer rl.endDrawing();
+            rl.clearBackground(.white);
 
-        rl.clearBackground(.white);
-
-        render.render_hexagons();
-
-        rl.drawText("Congrats! You created your first window!", 190, 200, 20, .light_gray);
-        //----------------------------------------------------------------------------------
+            rl.drawTriangle(
+                .{ .x = 0, .y = screenHeight / 2 },
+                .{ .x = 0, .y = screenHeight },
+                .{ .x = screenWidth / 5, .y = screenHeight / 5 },
+                .red,
+            );
+        }
     }
 }
