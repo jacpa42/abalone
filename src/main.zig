@@ -1,4 +1,5 @@
 const rl = @import("raylib");
+const render = @import("render.zig");
 
 pub fn main() anyerror!void {
     // Initialization
@@ -25,6 +26,8 @@ pub fn main() anyerror!void {
         defer rl.endDrawing();
 
         rl.clearBackground(.white);
+
+        render.render_hexagons();
 
         rl.drawText("Congrats! You created your first window!", 190, 200, 20, .light_gray);
         //----------------------------------------------------------------------------------

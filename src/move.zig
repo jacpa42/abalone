@@ -1,77 +1,193 @@
 const std = @import("std");
-const AxialPoint = @import("axial_point.zig").AxialPoint;
+const AxialVector = @import("axial_point.zig").AxialPoint;
 
-const Polarity = enum(u1) { positive, negative };
-const Axis = enum(u2) { q, r, s };
-pub const Direction = struct { axis: Axis, polarity: Polarity };
+pub const Polarity = enum { pos, neg };
+
+/// A direction in hex coordinates is a combination of 2 Axial axes.
+/// It represents all the directions we can move in for our game
+pub const HexagonalDirection = enum {
+    /// -r and +q
+    /// {q r s} = {1 -1 0}
+    ur,
+
+    /// Combination of +q and -s
+    /// {q r s} = {1 0 -1}
+    r,
+
+    /// Combination of -s and +r
+    /// {q r s} = {0 1 -1}
+    dr,
+
+    /// Combination of +r and -q
+    /// {q r s} = {-1 1 0}
+    dl,
+
+    /// Combination of -q and +s
+    /// {q r s} = {-1 0 1}
+    l,
+
+    /// Combination of +s and -r
+    /// {q r s} = {0 -1 1}
+    ul,
+
+    pub inline fn to_axial_vector(self: @This()) AxialVector {
+        return switch (self) {
+            .ur => .{ .q = 1, .r = -1 },
+            .r => .{ .q = 1, .r = 0 },
+            .dr => .{ .q = 0, .r = 1 },
+            .dl => .{ .q = -1, .r = 1 },
+            .l => .{ .q = -1, .r = 0 },
+            .ul => .{ .q = 0, .r = -1 },
+        };
+    }
+
+    /// Takes in a unit axial vector and returns a distance. Panics in debug mode if the vector size is != 1
+    pub inline fn from_unit_axial_vector(vec: AxialVector) @This() {
+        return switch (vec) {
+            .{ .q = 1, .r = -1 } => .ur,
+            .{ .q = 1, .r = 0 } => .r,
+            .{ .q = 0, .r = 1 } => .dr,
+            .{ .q = -1, .r = 1 } => .dl,
+            .{ .q = -1, .r = 0 } => .l,
+            .{ .q = 0, .r = -1 } => .ul,
+            else => unreachable,
+        };
+    }
+
+    pub inline fn neg(self: @This()) @This() {
+        return switch (self) {
+            .ur => .dl,
+            .r => .l,
+            .dr => .ul,
+            .dl => .ur,
+            .l => .r,
+            .ul => .dr,
+        };
+    }
+
+    /// If the two directions are aligned, then same direction returns `.pos` and opposite directions return `.neg`. Otherwise null
+    pub inline fn alignment(self: @This(), other: @This()) ?Polarity {
+        if (self == other) return .pos;
+        if (self == other.neg()) return .neg;
+        return null;
+    }
+};
 
 const MoveCreationError = error{
     NoPoints,
     TooManyPoints,
     PointsNotTogether,
+    PointsNotHexAligned,
+};
+
+pub const MoveType = enum {
+    Broadside1,
+    Broadside2,
+    Broadside3,
+    Inline1,
+    Inline2,
+    Inline3,
 };
 
 /// A general game move.
+///
+/// `BroadsideN`: For this move type we have several pieces and a direction in which they move, we don't care much for the order of the pieces.
+/// `InlineN`: For this type of move the pieces move along the axis defined in the `dir` field.
 pub const Move = struct {
-    /// Note that this has 1 <= len <= 3
-    points: []AxialPoint,
-    direction: Direction,
-    point_alignment: Direction,
+    move_type: MoveType,
+
+    /// Head is 0, tail is 1. Number of pieces is defined by the `move_type`
+    chain: [2]AxialVector,
+    dir: HexagonalDirection,
 
     /// Note that this will mutate the order points potentially!
-    pub fn new(points: []AxialPoint, direction: Direction) MoveCreationError!@This() {
+    pub fn new(points: []const AxialVector, move_dir: HexagonalDirection) MoveCreationError!@This() {
         switch (points.len) {
             0 => return error.NoPoints,
-            1 => return Move{ .points = points, .direction = direction },
+            1 => return Move{ .Inline1 = .{ .point = points[0], .dir = move_dir } },
             2 => {
-                // Compute the hex 01 vector.
-                const chain_vec = points[0].sub(points[1]);
+                // 0 -> 1 vector
+                const vec = points[1].sub(points[0]);
 
-                var move = @This(){ .points = points, .direction = direction, .point_alignment = undefined };
+                // Distance between them must be 1
+                if (vec.size() != 1) return error.PointsNotTogether;
 
-                // If they lie along the q-axis, then r = 0
-                if (chain_vec.r == 0) {
-                    // The distance along the q axis is 1 in absolute value
-                    const polarity = switch (chain_vec.q) {
-                        -1 => Polarity.negative,
-                        1 => Polarity.positive,
-                        else => return error.PointsNotTogether,
-                    };
+                const vec_dir = HexagonalDirection.from_unit_axial_vector(vec);
 
-                    move.direction = .{ .axis = .q, .polarity = polarity };
-                    return move;
+                switch (vec_dir.alignment(move_dir)) {
+                    // 0 -> 1 is in the same direction as the move_dir
+                    .pos => return Move{
+                        .move_type = .Inline2,
+                        .chain = .{ points[0], points[1] },
+                        .dir = move_dir,
+                    },
+
+                    // 0 -> 1 is in the opposite direction as the move_dir
+                    .neg => return Move{
+                        .move_type = .Inline2,
+                        .chain = .{ points[1], points[0] },
+                        .dir = move_dir,
+                    },
+
+                    // must be broadside
+                    null => return Move{
+                        .move_type = .Broadside2,
+                        .chain = .{ points[0], points[1] },
+                        .dir = move_dir,
+                    },
                 }
-                // If they lie along the r-axis, then q = 0
-                if (chain_vec.q == 0) {
-                    // The distance along the r axis is 1 in absolute value
-                    const polarity = switch (chain_vec.r) {
-                        -1 => Polarity.negative,
-                        1 => Polarity.positive,
-                        else => return error.PointsNotTogether,
-                    };
-
-                    move.direction = .{ .axis = .r, .polarity = polarity };
-                    return move;
-                }
-                // If they lie along the s-axis, then s = 0 => q = -r
-                if (chain_vec.q == -chain_vec.r) {
-
-                    // The distance along the r axis is 1 in absolute value
-                    const polarity = switch (chain_vec.q) {
-                        -1 => Polarity.negative,
-                        1 => Polarity.positive,
-                        else => return error.PointsNotTogether,
-                    };
-
-                    move.direction = .{ .axis = .s, .polarity = polarity };
-                    return move;
-                }
-
-                // otherwise we shit the bed
-                return error.PointsNotTogether;
             },
+
             3 => {
-                // todo!!!
+                // For the case of 3 points we only need the head and tail.
+                // Because of this we do the exact same thing as on the 2
+                // point case but with some other checks just before
+
+                const indices: [3][3]usize = .{ .{ 0, 1, 2 }, .{ 0, 2, 1 }, .{ 1, 2, 0 } };
+                inline for (indices) |idx| {
+                    const a, const b, const c = idx;
+
+                    // a -> b vector
+                    const vec = points[a].sub(points[b]);
+
+                    // Distance between them must be 2
+                    if (vec.size() != 2) continue;
+
+                    // a and b are 2 apart, so c must lie in the middle and be exactly 1 away from both
+                    if (points[a].dist(points[c]) != points[b].dist(points[c])) return error.PointsNotTogether;
+
+                    // Reduce its size by 2 so that the same logic as above works
+                    std.debug.assert(vec.q & 1 == 0 and vec.r & 1 == 0);
+                    vec.q = @shrExact(vec.q, 1);
+                    vec.r = @shrExact(vec.r, 1);
+
+                    const vec_dir = HexagonalDirection.from_unit_axial_vector(vec);
+
+                    switch (vec_dir.alignment(move_dir)) {
+                        // 0 -> 1 is in the same direction as the move_dir
+                        .pos => return Move{
+                            .move_type = .Inline3,
+                            .chain = .{ points[a], points[b] },
+                            .dir = move_dir,
+                        },
+
+                        // 0 -> 1 is in the opposite direction as the move_dir
+                        .neg => return Move{
+                            .move_type = .Inline3,
+                            .chain = .{ points[b], points[a] },
+                            .dir = move_dir,
+                        },
+
+                        // must be broadside
+                        null => return Move{
+                            .move_type = .Broadside3,
+                            .chain = .{ points[a], points[b] },
+                            .dir = move_dir,
+                        },
+                    }
+                }
+
+                return error.PointsNotTogether;
             },
 
             else => return error.TooManyPoints,
