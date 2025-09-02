@@ -1,5 +1,5 @@
 const std = @import("std");
-const AxialVector = @import("axial_point.zig").AxialPoint;
+const AxialVector = @import("axial.zig").AxialVector;
 
 pub const Polarity = enum { pos, neg };
 

@@ -1,33 +1,74 @@
+const sdl3 = @import("sdl3");
 const std = @import("std");
-const rl = @import("raylib");
-const render = @import("render.zig");
 
-pub fn main() anyerror!void {
-    // Initialization
-    //--------------------------------------------------------------------------------------
-    const screenWidth = 800;
-    const screenHeight = 450;
+const State = @import("state.zig").State;
+const IRect = sdl3.rect.IRect;
+const Key = sdl3.keycode.Keycode;
 
-    rl.initWindow(screenWidth, screenHeight, "raylib-zig [core] example - basic window");
-    defer rl.closeWindow(); // Close window and OpenGL context
+const fps = 60;
 
-    rl.setTargetFPS(60); // Set our game to run at 60 frames-per-second
-    //--------------------------------------------------------------------------------------
+pub fn main() !void {
+    defer sdl3.shutdown();
 
-    // Main game loop
-    while (!rl.windowShouldClose()) {
-        {
-            rl.beginDrawing();
-            defer rl.endDrawing();
+    // Initialize SDL with subsystems you need here.
+    const init_flags = sdl3.InitFlags{ .video = true };
+    try sdl3.init(init_flags);
+    defer sdl3.quit(init_flags);
 
-            rl.clearBackground(.white);
+    var state = State.new();
+    var screen_width: f32 = 1000;
+    var screen_height: f32 = 1000;
 
-            rl.drawTriangle(
-                .{ .x = 0, .y = screenHeight / 2 },
-                .{ .x = 0, .y = screenHeight },
-                .{ .x = screenWidth / 5, .y = screenHeight / 5 },
-                .red,
-            );
-        }
+    // Create a rendering context and window
+    const gfx = try sdl3.render.Renderer.initWithWindow(
+        "abalone",
+        @intFromFloat(screen_width),
+        @intFromFloat(screen_height),
+        .{
+            .always_on_top = true,
+            .keyboard_grabbed = true,
+            .open_gl = true,
+            .resizable = false,
+            .borderless = true,
+        },
+    );
+
+    defer gfx.window.deinit();
+    defer gfx.renderer.deinit();
+
+    // Useful for limiting the FPS and getting the delta time.
+    var fps_capper = sdl3.extras.FramerateCapper(f32){ .mode = .{ .limited = fps } };
+
+    var quit = false;
+    while (!quit) {
+        // Delay to limit the FPS, returned delta time not needed.
+        const dt = fps_capper.delay();
+        _ = dt;
+
+        try state.render(
+            screen_height,
+            screen_width,
+            &gfx.renderer,
+        );
+
+        try gfx.renderer.present();
+
+        // Event logic.
+        while (sdl3.events.poll()) |event|
+            switch (event) {
+                .quit => quit = true,
+                .terminating => quit = true,
+                .key_down => |keyboard| {
+                    if (keyboard.key == .escape) quit = true;
+                },
+                .window_resized => |resize| {
+                    screen_width = @floatFromInt(resize.width);
+                    screen_height = @floatFromInt(resize.height);
+                },
+                .mouse_button_down => |mb| {
+                    std.debug.print("{any}\n", .{mb});
+                },
+                else => {},
+            };
     }
 }
