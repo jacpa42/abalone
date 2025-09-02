@@ -1,18 +1,21 @@
 const std = @import("std");
 const sdl3 = @import("sdl3");
 
+pub const Color = sdl3.pixels.FColor;
 const Renderer = sdl3.render.Renderer;
 const Point = sdl3.rect.FPoint;
-const Color = sdl3.pixels.FColor;
 const Vertex = sdl3.render.Vertex;
+
+const size = @import("../axial.zig").AxialVector.radius;
 
 pub const grey = Color{ .r = 114.0 / 255.0, .g = 113.0 / 255.0, .b = 105.0 / 255.0, .a = 1.0 };
 pub const white = Color{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 1.0 };
 pub const black = Color{ .r = 1.0, .g = 1.0, .b = 1.0, .a = 1.0 };
 pub const purple = Color{ .r = 202.0 / 255.0, .g = 158.0 / 255.0, .b = 230.0 / 255.0, .a = 1.0 };
+pub const red = Color{ .r = 232.0 / 255.0, .g = 36.0 / 255.0, .b = 36.0 / 255.0, .a = 1.0 };
 
-pub const Hexagon = Poly(6, std.math.pi / 6.0);
-pub const Circle = Poly(20, 0);
+pub const Hexagon = Poly(6, std.math.pi / 6.0, size);
+pub const Circle = Poly(20, 0, size);
 
 fn default_indices(comptime num_sides: comptime_int) [3 * num_sides]c_int {
     var indices: [3 * num_sides]c_int = undefined;
@@ -28,7 +31,7 @@ fn default_indices(comptime num_sides: comptime_int) [3 * num_sides]c_int {
     return indices;
 }
 
-fn default_vertices(comptime num_sides: comptime_int, angle_offset: f32) [1 + num_sides]Vertex {
+fn default_vertices(comptime num_sides: comptime_int, angle_offset: f32, radius: f32) [1 + num_sides]Vertex {
     const num_vertices = 1 + num_sides;
     const theta = (2.0 * std.math.pi) / @as(f32, @floatFromInt(num_sides));
 
@@ -42,15 +45,15 @@ fn default_vertices(comptime num_sides: comptime_int, angle_offset: f32) [1 + nu
     // Set positions
     for (vertices[1..], 0..) |*vertex, corner_idx| {
         const angle = @as(f32, @floatFromInt(corner_idx)) * theta + angle_offset;
-        vertex.position = .{ .x = @cos(angle), .y = @sin(angle) };
+        vertex.position = .{ .x = radius * @cos(angle), .y = radius * @sin(angle) };
     }
 
     return vertices;
 }
 
-pub fn Poly(comptime num_sides: comptime_int, angle_offset: f32) type {
+pub fn Poly(comptime num_sides: comptime_int, angle_offset: f32, radius: f32) type {
     return struct {
-        vertices: [1 + num_sides]Vertex = default_vertices(num_sides, angle_offset),
+        vertices: [1 + num_sides]Vertex = default_vertices(num_sides, angle_offset, radius),
         pub const indicies = default_indices(num_sides);
 
         /// Scales the size of the polygon by a factor

@@ -1,5 +1,6 @@
 const sdl3 = @import("sdl3");
 const std = @import("std");
+const axial = @import("axial.zig");
 
 const State = @import("state.zig").State;
 const IRect = sdl3.rect.IRect;
@@ -15,7 +16,7 @@ pub fn main() !void {
     try sdl3.init(init_flags);
     defer sdl3.quit(init_flags);
 
-    var state = State.new();
+    var state = State{};
     var screen_width: f32 = 1000;
     var screen_height: f32 = 1000;
 
@@ -45,11 +46,7 @@ pub fn main() !void {
         const dt = fps_capper.delay();
         _ = dt;
 
-        try state.render(
-            screen_height,
-            screen_width,
-            &gfx.renderer,
-        );
+        try state.render(&gfx.renderer, screen_width, screen_height);
 
         try gfx.renderer.present();
 
@@ -66,7 +63,14 @@ pub fn main() !void {
                     screen_height = @floatFromInt(resize.height);
                 },
                 .mouse_button_down => |mb| {
-                    std.debug.print("{any}\n", .{mb});
+                    const moused_over = axial.AxialVector.from_pixel_vec_screen_space(mb.x, mb.y, screen_width, screen_height);
+                    state.try_pick_ball(moused_over);
+
+                    std.debug.print("selected = {any}\n", .{&state.selected_balls.items});
+                },
+                .mouse_motion => |mb| {
+                    const moused_over = axial.AxialVector.from_pixel_vec_screen_space(mb.x, mb.y, screen_width, screen_height);
+                    state.moused_over = moused_over.if_in_bounds();
                 },
                 else => {},
             };
