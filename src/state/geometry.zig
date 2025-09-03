@@ -9,6 +9,7 @@ const Vertex = sdl3.render.Vertex;
 const size = @import("../axial.zig").AxialVector.radius;
 
 pub const grey = Color{ .r = 114.0 / 255.0, .g = 113.0 / 255.0, .b = 105.0 / 255.0, .a = 1.0 };
+pub const light_grey = Color{ .r = 114.0 / 255.0, .g = 113.0 / 255.0, .b = 105.0 / 255.0, .a = 0.5 };
 pub const white = Color{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 1.0 };
 pub const black = Color{ .r = 1.0, .g = 1.0, .b = 1.0, .a = 1.0 };
 pub const purple = Color{ .r = 202.0 / 255.0, .g = 158.0 / 255.0, .b = 230.0 / 255.0, .a = 1.0 };

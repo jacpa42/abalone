@@ -7,6 +7,7 @@ const IRect = sdl3.rect.IRect;
 const Key = sdl3.keycode.Keycode;
 
 const fps = 60;
+pub const logical_size = 100;
 
 pub fn main() !void {
     defer sdl3.shutdown();
@@ -16,67 +17,63 @@ pub fn main() !void {
     try sdl3.init(init_flags);
     defer sdl3.quit(init_flags);
 
-    var state = State{};
-    var screen_width: f32 = 1000;
-    var screen_height: f32 = 1000;
+    var state = State{ .screen_width = 1000, .screen_height = 1000 };
+
+    var window_flags = sdl3.video.Window.Flags{
+        .always_on_top = true,
+        .keyboard_grabbed = true,
+        .resizable = false,
+        .borderless = true,
+    };
+
+    switch (@import("builtin").target.os.tag) {
+        .macos => window_flags.metal = true,
+        .linux => window_flags.open_gl = true,
+        else => std.log.err("Get a real operating system.", .{}),
+    }
 
     // Create a rendering context and window
     const gfx = try sdl3.render.Renderer.initWithWindow(
         "abalone",
-        @intFromFloat(screen_width),
-        @intFromFloat(screen_height),
-        .{
-            .always_on_top = true,
-            .keyboard_grabbed = true,
-            .open_gl = true,
-            .resizable = false,
-            .borderless = true,
-        },
+        @intFromFloat(state.screen_width),
+        @intFromFloat(state.screen_height),
+        window_flags,
     );
-
     defer gfx.window.deinit();
     defer gfx.renderer.deinit();
+
+    try gfx.renderer.setLogicalPresentation(logical_size, logical_size, .stretch);
 
     // Useful for limiting the FPS and getting the delta time.
     var fps_capper = sdl3.extras.FramerateCapper(f32){ .mode = .{ .limited = fps } };
 
-    var quit = false;
-    while (!quit) {
+    while (!state.quit) {
         // Delay to limit the FPS, returned delta time not needed.
         const dt = fps_capper.delay();
         _ = dt;
 
-        try state.render(&gfx.renderer, screen_width, screen_height);
+        try state.render(&gfx.renderer);
 
         try gfx.renderer.present();
 
         // Event logic.
         while (sdl3.events.poll()) |event|
             switch (event) {
-                .quit => quit = true,
-                .terminating => quit = true,
+                .quit => state.quit = true,
+                .terminating => state.quit = true,
                 .key_down => |keyboard| {
                     const key = keyboard.key orelse continue;
-                    switch (key) {
-                        .escape => quit = true,
-                        // TODO: select the current balls, choose the move and then execute and swap turns
-                        .return_key => quit = true,
-                        else => {},
-                    }
+                    state.process_keydown(key);
                 },
                 .window_resized => |resize| {
-                    screen_width = @floatFromInt(resize.width);
-                    screen_height = @floatFromInt(resize.height);
+                    state.screen_width = @floatFromInt(resize.width);
+                    state.screen_height = @floatFromInt(resize.height);
                 },
-                .mouse_button_down => |mb| {
-                    const moused_over = axial.AxialVector.from_pixel_vec_screen_space(mb.x, mb.y, screen_width, screen_height);
-                    state.try_pick_ball(moused_over) catch {
-                        std.debug.print("Cannot select ball {any}\n", .{moused_over});
-                    };
+                .mouse_button_down => |*mb| {
+                    state.process_mousebutton_down(mb);
                 },
-                .mouse_motion => |mb| {
-                    const moused_over = axial.AxialVector.from_pixel_vec_screen_space(mb.x, mb.y, screen_width, screen_height);
-                    state.moused_over = moused_over.if_in_bounds();
+                .mouse_motion => |*mb| {
+                    state.process_mouse_moved(mb.x, mb.y);
                 },
                 else => {},
             };

@@ -1,8 +1,6 @@
 const std = @import("std");
 const AxialVector = @import("axial.zig").AxialVector;
 
-pub const Polarity = enum { pos, neg };
-
 /// A direction in hex coordinates is a combination of 2 Axial axes.
 /// It represents all the directions we can move in for our game
 pub const HexagonalDirection = enum {
@@ -41,43 +39,23 @@ pub const HexagonalDirection = enum {
         };
     }
 
-    /// Takes in a unit axial vector and returns a distance. Panics in debug mode if the vector size is != 1
-    pub inline fn from_unit_axial_vector(vec: AxialVector) @This() {
-        return switch (vec) {
-            .{ .q = 1, .r = -1 } => .ur,
-            .{ .q = 1, .r = 0 } => .r,
-            .{ .q = 0, .r = 1 } => .dr,
-            .{ .q = -1, .r = 1 } => .dl,
-            .{ .q = -1, .r = 0 } => .l,
-            .{ .q = 0, .r = -1 } => .ul,
-            else => unreachable,
-        };
-    }
+    // pub inline fn neg(self: @This()) @This() {
+    //     return switch (self) {
+    //         .ur => .dl,
+    //         .r => .l,
+    //         .dr => .ul,
+    //         .dl => .ur,
+    //         .l => .r,
+    //         .ul => .dr,
+    //     };
+    // }
 
-    pub inline fn neg(self: @This()) @This() {
-        return switch (self) {
-            .ur => .dl,
-            .r => .l,
-            .dr => .ul,
-            .dl => .ur,
-            .l => .r,
-            .ul => .dr,
-        };
-    }
-
-    /// If the two directions are aligned, then same direction returns `.pos` and opposite directions return `.neg`. Otherwise null
-    pub inline fn alignment(self: @This(), other: @This()) ?Polarity {
-        if (self == other) return .pos;
-        if (self == other.neg()) return .neg;
-        return null;
-    }
-};
-
-const MoveCreationError = error{
-    NoPoints,
-    TooManyPoints,
-    PointsNotTogether,
-    PointsNotHexAligned,
+    // If the two directions are aligned, then same direction returns `.pos` and opposite directions return `.neg`. Otherwise null
+    // pub inline fn alignment(self: @This(), other: @This()) ?enum { pos, neg } {
+    //     if (self == other) return .pos;
+    //     if (self == other.neg()) return .neg;
+    //     return null;
+    // }
 };
 
 pub const MoveType = enum {
@@ -100,21 +78,17 @@ pub const Move = struct {
     chain: [2]AxialVector,
     dir: HexagonalDirection,
 
-    /// Note that this will mutate the order points potentially!
-    pub fn new(points: []const AxialVector, move_dir: HexagonalDirection) MoveCreationError!@This() {
+    /// Constructs a new move. The points put into this function are assumed to be hexagonally aligned.
+    pub fn new(points: []const AxialVector, move_dir: HexagonalDirection) error{ NoPoints, TooManyPoints }!@This() {
         switch (points.len) {
             0 => return error.NoPoints,
             1 => return Move{ .Inline1 = .{ .point = points[0], .dir = move_dir } },
             2 => {
                 // 0 -> 1 vector
                 const vec = points[1].sub(points[0]);
+                const move_vec = move_dir.to_axial_vector();
 
-                // Distance between them must be 1
-                if (vec.size() != 1) return error.PointsNotTogether;
-
-                const vec_dir = HexagonalDirection.from_unit_axial_vector(vec);
-
-                switch (vec_dir.alignment(move_dir)) {
+                switch (vec.alignment(move_vec)) {
                     // 0 -> 1 is in the same direction as the move_dir
                     .pos => return Move{
                         .move_type = .Inline2,
@@ -143,9 +117,9 @@ pub const Move = struct {
                 // Because of this we do the exact same thing as on the 2
                 // point case but with some other checks just before
 
-                const indices: [3][3]usize = .{ .{ 0, 1, 2 }, .{ 0, 2, 1 }, .{ 1, 2, 0 } };
+                const indices: [3][3]usize = .{ .{ 0, 1 }, .{ 0, 2 }, .{ 1, 2 } };
                 inline for (indices) |idx| {
-                    const a, const b, const c = idx;
+                    const a, const b = idx;
 
                     // a -> b vector
                     const vec = points[a].sub(points[b]);
@@ -153,17 +127,9 @@ pub const Move = struct {
                     // Distance between them must be 2
                     if (vec.size() != 2) continue;
 
-                    // a and b are 2 apart, so c must lie in the middle and be exactly 1 away from both
-                    if (points[a].dist(points[c]) != points[b].dist(points[c])) return error.PointsNotTogether;
+                    const move_vec = move_dir.to_axial_vector();
 
-                    // Reduce its size by 2 so that the same logic as above works
-                    std.debug.assert(vec.q & 1 == 0 and vec.r & 1 == 0);
-                    vec.q = @shrExact(vec.q, 1);
-                    vec.r = @shrExact(vec.r, 1);
-
-                    const vec_dir = HexagonalDirection.from_unit_axial_vector(vec);
-
-                    switch (vec_dir.alignment(move_dir)) {
+                    switch (vec.alignment(move_vec)) {
                         // 0 -> 1 is in the same direction as the move_dir
                         .pos => return Move{
                             .move_type = .Inline3,
@@ -187,7 +153,7 @@ pub const Move = struct {
                     }
                 }
 
-                return error.PointsNotTogether;
+                unreachable;
             },
 
             else => return error.TooManyPoints,

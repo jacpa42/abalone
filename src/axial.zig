@@ -91,6 +91,20 @@ pub const AxialVector = packed struct {
         return self.q * other.r == self.r * other.q;
     }
 
+    /// Checks that the vectors are parallel and whether they are in the same quadrant
+    ///
+    /// `pos` : The vectors are parallel and face the same direction.
+    /// `neg` : The vectors are parallel and opposite directions.
+    /// `null` : The vectors are not parallel.
+    pub inline fn alignment(self: @This(), other: @This()) ?enum { pos, neg } {
+        if (!self.parallel(other)) return null;
+
+        // If their q coordinate is equal then they must be aligned positively as
+        // `self.q * other.r` and `self.r * other.q` are equal.
+        if (self.q < 0 and other.q < 0) return .pos;
+        return .neg;
+    }
+
     pub inline fn add(self: @This(), other: @This()) @This() {
         return @This(){ .q = self.q + other.q, .r = self.r + other.r };
     }
