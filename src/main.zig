@@ -56,7 +56,13 @@ pub fn main() !void {
                 .quit => quit = true,
                 .terminating => quit = true,
                 .key_down => |keyboard| {
-                    if (keyboard.key == .escape) quit = true;
+                    const key = keyboard.key orelse continue;
+                    switch (key) {
+                        .escape => quit = true,
+                        // TODO: select the current balls, choose the move and then execute and swap turns
+                        .return_key => quit = true,
+                        else => {},
+                    }
                 },
                 .window_resized => |resize| {
                     screen_width = @floatFromInt(resize.width);
