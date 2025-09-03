@@ -67,12 +67,16 @@ pub const AxialVector = packed struct {
     }
 
     /// Computes the Manhatten distance.
-    pub inline fn dist(self: @This(), other: @This()) i8 {
+    pub inline fn dist(self: @This(), other: @This()) u8 {
         return self.sub(other).size();
     }
 
-    pub inline fn size(self: @This()) i8 {
+    pub inline fn size(self: @This()) u8 {
         return (@abs(self.q) + @abs(self.q + self.r) + @abs(self.r)) >> 1;
+    }
+
+    pub inline fn neg(self: @This()) @This() {
+        return @This(){ .q = -self.q, .r = -self.r };
     }
 
     pub inline fn s(self: @This()) i8 {
@@ -80,7 +84,11 @@ pub const AxialVector = packed struct {
     }
 
     pub inline fn sub(self: @This(), other: @This()) @This() {
-        return @This(){ .q = self.q - other.q, .r = self.r - other.r };
+        return self.add(other.neg());
+    }
+
+    pub inline fn parallel(self: @This(), other: @This()) bool {
+        return self.q * other.r == self.r * other.q;
     }
 
     pub inline fn add(self: @This(), other: @This()) @This() {

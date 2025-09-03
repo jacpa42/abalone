@@ -64,9 +64,9 @@ pub fn main() !void {
                 },
                 .mouse_button_down => |mb| {
                     const moused_over = axial.AxialVector.from_pixel_vec_screen_space(mb.x, mb.y, screen_width, screen_height);
-                    state.try_pick_ball(moused_over);
-
-                    std.debug.print("selected = {any}\n", .{&state.selected_balls.items});
+                    state.try_pick_ball(moused_over) catch {
+                        std.debug.print("Cannot select ball {any}\n", .{moused_over});
+                    };
                 },
                 .mouse_motion => |mb| {
                     const moused_over = axial.AxialVector.from_pixel_vec_screen_space(mb.x, mb.y, screen_width, screen_height);

@@ -10,15 +10,6 @@ const Marbles = pt_array.PointArray(14);
 
 /// Basically a cyclical array of ball indicies for the current player
 const SelectedBalls = struct {
-    /// All the neighbours of the same color. The max neighbours you can have is the following:
-    ///
-    ///  ◯ ◯ ◯ ◯
-    /// ◯ ● ● ● ◯
-    ///  ◯ ◯ ◯ ◯
-    ///
-    /// which is 10
-    neighbours: pt_array.PointArray(10) = .empty,
-
     items: [3]AxialVector = undefined,
     len: usize = 0,
 
@@ -27,42 +18,34 @@ const SelectedBalls = struct {
     }
 
     /// Trys to insert the item into the back of `items`
-    pub fn try_insert(self: *@This(), item: AxialVector) bool {
-        // If the vector is empty somewhere then select and return
-        if (self.len == self.items.len) return false;
+    pub fn try_insert(self: *@This(), item: AxialVector) error{OutOfMemory}!void {
+        if (self.len == self.items.len) return error.OutOfMemory;
 
         self.items[self.len] = item;
         self.len += 1;
-        return true;
     }
 
-    /// Just recomputes all neighbours. We need to know our potential same_color neighbours so we pass that in.
-    pub fn update_neighbours(self: *@This(), same_color_balls: []const AxialVector) void {
-        self.neighbours = .empty;
-        // If the vector is empty somewhere then select and return
-        inline for (self.items[self.len]) |pos| {
-            inline for (pos.neighbours()) |neighbour| {
-                if (self.neighbours.contains(neighbour)) continue;
+    /// Checks that the `pt` is:
+    ///
+    /// - Not one of the already selected balls
+    /// - 1 distance away from 1 of the balls
+    pub fn is_neighbour(self: *const @This(), pt: AxialVector) bool {
+        if (self.len == 0) return true;
+        for (self.const_slice()) |ball| if (ball == pt) return false;
+        for (self.const_slice()) |ball| if (ball.dist(pt) == 1) return true;
 
-                for (same_color_balls) |sc_ball| {
-                    if (sc_ball == neighbour) {
-                        // Should not be possible here
-                        self.neighbours.append(neighbour) catch unreachable;
-                        break;
-                    }
-                }
-            }
-        }
+        return false;
     }
 
     pub inline fn find(self: *const @This(), pos: AxialVector) ?usize {
-        inline for (self.items, 0..) |selected, idx| {
+        for (self.const_slice(), 0..) |selected, idx| {
             if (selected == pos) return idx;
         }
         return null;
     }
 
     pub inline fn swap_remove(self: *@This(), idx: usize) void {
+        std.debug.print("idx = {}\n", .{idx});
         std.debug.assert(idx < self.len);
         self.len -= 1;
         self.items[idx] = self.items[self.len];
@@ -83,27 +66,45 @@ pub const State = struct {
     turn: enum(u1) { p1, p2 } = .p1,
 
     /// Will try to pick the ball. If the ball is not the correct color or there is no ball there it will shit the bed.
-    pub fn try_pick_ball(self: *@This(), at: AxialVector) void {
+    ///
+    /// - All balls must be in bounds.
+    /// - All balls must be neighbours.
+    /// - All balls need to match the player color.
+    /// - All balls need to be in a straight line.
+    pub fn try_pick_ball(self: *@This(), at: AxialVector) error{OutOfMemory}!void {
         std.debug.print("at = {any}", .{at});
-        if (self.selected_balls.find(at)) |idx| {
-            self.selected_balls.swap_remove(idx);
+
+        const selected = &self.selected_balls;
+
+        // Check that the ball is in bounds
+        if (at.out_of_bounds()) return;
+
+        if (selected.find(at)) |idx| {
+            selected.swap_remove(idx);
             return;
         }
 
-        switch (self.turn) {
-            .p1 => for (self.p1.marbles.const_slice()) |marble_pos| {
-                if (marble_pos == at) {
-                    _ = self.selected_balls.try_insert(marble_pos);
-                    return;
-                }
-            },
-            .p2 => for (self.p2.marbles.const_slice()) |marble_pos| {
-                if (marble_pos == at) {
-                    _ = self.selected_balls.try_insert(marble_pos);
-                    return;
-                }
-            },
+        // Check that the ball is a neighbour
+        if (!selected.is_neighbour(at)) return;
+
+        // Check that the balls are the same color
+        const same_color = switch (self.turn) {
+            .p1 => self.p1.marbles.contains(at),
+            .p2 => self.p2.marbles.contains(at),
+        };
+        if (!same_color) return;
+
+        // If we have 2 balls then we need to check alignment of the third
+        if (selected.len == 2) {
+            // 0 -> p vec
+            const vec0p = at.sub(selected.items[0]);
+            // 1 -> p vec
+            const vec1p = at.sub(selected.items[1]);
+            // These must be parallel
+            if (!vec0p.parallel(vec1p)) return;
         }
+
+        try self.selected_balls.try_insert(at);
     }
 
     pub fn render_background_hexagons(

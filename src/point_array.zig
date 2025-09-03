@@ -16,7 +16,7 @@ pub fn PointArray(comptime max_cap: usize) type {
         pub const CAPACITY = max_cap;
 
         pub fn contains(self: *const @This(), item: AxialVector) bool {
-            inline for (self.const_slice()) |point| {
+            for (self.const_slice()) |point| {
                 if (item == point) return true;
             }
             return false;
@@ -50,6 +50,30 @@ fn black_start() Array {
     const bound = 4;
     var array = Array{ .data = undefined, .len = 0 };
 
+    var r = -bound;
+    while (r <= -bound + 1) : (r += 1) {
+        var q = @max(-bound, -bound - r);
+        const end = @min(bound, bound - r);
+        while (q <= end) : (q += 1) {
+            array.data[array.len] = AxialVector{ .q = q, .r = r };
+            array.len += 1;
+        }
+    }
+
+    r = -bound + 2;
+    var q = 0;
+    while (q <= 2) : (q += 1) {
+        array.data[array.len] = AxialVector{ .q = q, .r = r };
+        array.len += 1;
+    }
+
+    return array;
+}
+
+fn white_start() Array {
+    const bound = 4;
+    var array = Array{ .data = undefined, .len = 0 };
+
     var r = bound;
     while (r >= bound - 1) : (r -= 1) {
         var q = @max(-bound, -bound - r);
@@ -64,30 +88,6 @@ fn black_start() Array {
     r = bound - 2;
     var q = 0;
     while (q >= -2) : (q -= 1) {
-        array.data[array.len] = AxialVector{ .q = q, .r = r };
-        array.len += 1;
-    }
-
-    return array;
-}
-
-fn white_start() Array {
-    const bound = 4;
-    var array = Array{ .data = undefined, .len = 0 };
-
-    var r = -bound;
-    while (r <= -bound + 1) : (r += 1) {
-        var q = @max(-bound, -bound - r);
-        const end = @min(bound, bound - r);
-        while (q <= end) : (q += 1) {
-            array.data[array.len] = AxialVector{ .q = q, .r = r };
-            array.len += 1;
-        }
-    }
-
-    r = -bound + 2;
-    var q = 0;
-    while (q <= 2) : (q += 1) {
         array.data[array.len] = AxialVector{ .q = q, .r = r };
         array.len += 1;
     }
