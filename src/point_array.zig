@@ -64,30 +64,6 @@ fn black_start() Array {
     const bound = 4;
     var array = Array{ .items = undefined, .len = 0 };
 
-    var r = -bound;
-    while (r <= -bound + 1) : (r += 1) {
-        var q = @max(-bound, -bound - r);
-        const end = @min(bound, bound - r);
-        while (q <= end) : (q += 1) {
-            array.items[array.len] = AxialVector{ .q = q, .r = r };
-            array.len += 1;
-        }
-    }
-
-    r = -bound + 2;
-    var q = 0;
-    while (q <= 2) : (q += 1) {
-        array.items[array.len] = AxialVector{ .q = q, .r = r };
-        array.len += 1;
-    }
-
-    return array;
-}
-
-fn white_start() Array {
-    const bound = 4;
-    var array = Array{ .items = undefined, .len = 0 };
-
     var r = bound;
     while (r >= bound - 1) : (r -= 1) {
         var q = @max(-bound, -bound - r);
@@ -102,6 +78,30 @@ fn white_start() Array {
     r = bound - 2;
     var q = 0;
     while (q >= -2) : (q -= 1) {
+        array.items[array.len] = AxialVector{ .q = q, .r = r };
+        array.len += 1;
+    }
+
+    return array;
+}
+
+fn white_start() Array {
+    const bound = 4;
+    var array = Array{ .items = undefined, .len = 0 };
+
+    var r = -bound;
+    while (r <= -bound + 1) : (r += 1) {
+        var q = @max(-bound, -bound - r);
+        const end = @min(bound, bound - r);
+        while (q <= end) : (q += 1) {
+            array.items[array.len] = AxialVector{ .q = q, .r = r };
+            array.len += 1;
+        }
+    }
+
+    r = -bound + 2;
+    var q = 0;
+    while (q <= 2) : (q += 1) {
         array.items[array.len] = AxialVector{ .q = q, .r = r };
         array.len += 1;
     }

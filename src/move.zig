@@ -59,7 +59,6 @@ pub const HexagonalDirection = enum {
 };
 
 pub const MoveType = enum {
-    Broadside1,
     Broadside2,
     Broadside3,
     Inline1,
@@ -74,39 +73,42 @@ pub const MoveType = enum {
 pub const Move = struct {
     move_type: MoveType,
 
-    /// Head is 0, tail is 1. Number of pieces is defined by the `move_type`
-    chain: [2]AxialVector,
+    /// Head is 0, tail is last. Number of pieces is defined by the `move_type`
+    chain: [3]AxialVector,
     dir: HexagonalDirection,
 
     /// Constructs a new move. The points put into this function are assumed to be hexagonally aligned.
     pub fn new(points: []const AxialVector, move_dir: HexagonalDirection) error{ NoPoints, TooManyPoints }!@This() {
         switch (points.len) {
             0 => return error.NoPoints,
-            1 => return Move{ .Inline1 = .{ .point = points[0], .dir = move_dir } },
+            1 => return Move{
+                .move_type = .Inline1,
+                .chain = .{ points[0], undefined, undefined },
+                .dir = move_dir,
+            },
             2 => {
                 // 0 -> 1 vector
                 const vec = points[1].sub(points[0]);
                 const move_vec = move_dir.to_axial_vector();
 
-                switch (vec.alignment(move_vec)) {
+                const alignment = vec.alignment(move_vec) orelse return Move{
+                    .move_type = .Broadside2,
+                    .chain = .{ points[0], points[1], undefined },
+                    .dir = move_dir,
+                };
+
+                switch (alignment) {
                     // 0 -> 1 is in the same direction as the move_dir
                     .pos => return Move{
                         .move_type = .Inline2,
-                        .chain = .{ points[0], points[1] },
+                        .chain = .{ points[0], points[1], undefined },
                         .dir = move_dir,
                     },
 
                     // 0 -> 1 is in the opposite direction as the move_dir
                     .neg => return Move{
                         .move_type = .Inline2,
-                        .chain = .{ points[1], points[0] },
-                        .dir = move_dir,
-                    },
-
-                    // must be broadside
-                    null => return Move{
-                        .move_type = .Broadside2,
-                        .chain = .{ points[0], points[1] },
+                        .chain = .{ points[1], points[0], undefined },
                         .dir = move_dir,
                     },
                 }
@@ -117,9 +119,9 @@ pub const Move = struct {
                 // Because of this we do the exact same thing as on the 2
                 // point case but with some other checks just before
 
-                const indices: [3][3]usize = .{ .{ 0, 1 }, .{ 0, 2 }, .{ 1, 2 } };
-                inline for (indices) |idx| {
-                    const a, const b = idx;
+                const indices: [3][3]usize = .{ .{ 0, 1, 2 }, .{ 0, 2, 1 }, .{ 1, 2, 0 } };
+                for (indices) |idx| {
+                    const a, const b, const c = idx;
 
                     // a -> b vector
                     const vec = points[a].sub(points[b]);
@@ -129,25 +131,24 @@ pub const Move = struct {
 
                     const move_vec = move_dir.to_axial_vector();
 
-                    switch (vec.alignment(move_vec)) {
+                    const alignment = vec.alignment(move_vec) orelse return Move{
+                        .move_type = .Broadside3,
+                        .chain = .{ points[a], points[c], points[b] },
+                        .dir = move_dir,
+                    };
+
+                    switch (alignment) {
                         // 0 -> 1 is in the same direction as the move_dir
                         .pos => return Move{
                             .move_type = .Inline3,
-                            .chain = .{ points[a], points[b] },
+                            .chain = .{ points[a], points[c], points[b] },
                             .dir = move_dir,
                         },
 
                         // 0 -> 1 is in the opposite direction as the move_dir
                         .neg => return Move{
                             .move_type = .Inline3,
-                            .chain = .{ points[b], points[a] },
-                            .dir = move_dir,
-                        },
-
-                        // must be broadside
-                        null => return Move{
-                            .move_type = .Broadside3,
-                            .chain = .{ points[a], points[b] },
+                            .chain = .{ points[b], points[c], points[a] },
                             .dir = move_dir,
                         },
                     }

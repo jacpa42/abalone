@@ -6,8 +6,9 @@ const pt_array = @import("point_array.zig");
 
 const AxialVector = @import("axial.zig").AxialVector;
 const Direction = move.HexagonalDirection;
-
 const Marbles = pt_array.PointArray(14);
+
+const screen_factor = @import("main.zig").logical_size * 0.5;
 
 /// Basically a cyclical array of ball indicies for the current player
 const SelectedBalls = struct {
@@ -99,12 +100,9 @@ pub const Player = struct {
 ///
 /// 1. Player picks chain.
 /// 2. Player picks direction to move in.
-/// 3. Do move, update score and switch turns
-const TurnStateEnum = enum {
-    ChoosingChain,
-    ChoosingDirection,
-    ProcessMove,
-};
+///
+/// We then process the move and start again
+const TurnStateEnum = enum { ChoosingChain, ChoosingDirection };
 
 const Turn = enum {
     p1,
@@ -128,23 +126,10 @@ const TurnState = union(TurnStateEnum) {
         balls: SelectedBalls,
         dir: ?Direction,
     },
-    ProcessMove: struct {
-        turn: Turn,
-        balls: SelectedBalls,
-        dir: Direction,
-    },
 
     pub const default = TurnState{
         .ChoosingChain = .{ .turn = .p1, .balls = .{} },
     };
-
-    // pub inline fn get_turn(self: *const @This()) Turn {
-    //     return switch (self.*) {
-    //         .ChoosingChain => |*mv| mv.turn,
-    //         .ChoosingDirection => |*mv| mv.turn,
-    //         .ProcessMove => |*mv| mv.turn,
-    //     };
-    // }
 
     /// Trys to advance state, will fail in certain situations.
     pub fn next(self: @This()) ?@This() {
@@ -160,24 +145,9 @@ const TurnState = union(TurnStateEnum) {
                     },
                 };
             },
+
             .ChoosingDirection => |mv| {
-                // Note: I shouldn't actually need to check this.
-                if (mv.balls.marbles.len == 0) return null;
-
-                const dir = mv.dir orelse return null;
-
-                return TurnState{
-                    .ProcessMove = .{
-                        .turn = mv.turn,
-                        .balls = mv.balls,
-                        .dir = dir,
-                    },
-                };
-            },
-            .ProcessMove => |mv| {
-                return TurnState{
-                    .ChoosingChain = .{ .turn = mv.turn.next(), .balls = .{} },
-                };
+                return TurnState{ .ChoosingChain = .{ .turn = mv.turn.next(), .balls = .{} } };
             },
         }
     }
@@ -200,6 +170,13 @@ pub const State = struct {
             // TODO: select the current balls, choose the move and then execute and swap turns
             .return_key => {
                 self.turn_state = self.turn_state.next() orelse return;
+            },
+
+            .r => {
+                self.p1 = .{ .marbles = pt_array.white };
+                self.p2 = .{ .marbles = pt_array.black };
+                self.mouse_position = null;
+                self.turn_state = .default;
             },
             else => {},
         }
@@ -226,7 +203,167 @@ pub const State = struct {
                     }
                 }
             },
-            else => {},
+            .ChoosingDirection => |mv| {
+                const mv_dir = mv.dir orelse return;
+                const player_move = move.Move.new(mv.balls.marbles.const_slice(), mv_dir) catch |e| {
+                    std.log.err("Failed to construct move: {}", .{e});
+                    return;
+                };
+                self.try_do_move(mv.turn, player_move) catch |e| {
+                    std.log.err("Failed to do move: {}", .{e});
+                    return;
+                };
+
+                // If we have completed the move then we switch players
+                self.turn_state = self.turn_state.next() orelse return;
+            },
+        }
+    }
+
+    pub fn try_do_move(
+        self: *@This(),
+        turn: Turn,
+        mv: move.Move,
+    ) error{
+        OutOfBounds,
+        CannotPushSelf,
+        CannotPushEnemy,
+        ChainNotOwned,
+    }!void {
+        const move_vec = mv.dir.to_axial_vector();
+        var friend: *Player, var enemy: *Player = switch (turn) {
+            .p1 => .{ &self.p1, &self.p2 },
+            .p2 => .{ &self.p2, &self.p1 },
+        };
+
+        var marbles: *Marbles = &friend.marbles;
+        var enemy_marbles: *Marbles = &enemy.marbles;
+
+        switch (mv.move_type) {
+            .Inline1 => {
+                const marble: AxialVector = mv.chain[0].add(move_vec);
+
+                if (marble.out_of_bounds()) return error.OutOfBounds;
+                if (marbles.contains(marble)) return error.CannotPushSelf;
+                if (enemy_marbles.contains(marble)) return error.CannotPushEnemy;
+
+                const i = marbles.find(mv.chain[0]) orelse unreachable;
+                marbles.items[i] = marble;
+            },
+            .Broadside2 => {
+                const moved: [2]AxialVector = .{
+                    mv.chain[0].add(move_vec),
+                    mv.chain[1].add(move_vec),
+                };
+
+                inline for (moved) |marble| {
+                    if (marble.out_of_bounds()) return error.OutOfBounds;
+                    if (marbles.contains(marble)) return error.CannotPushSelf;
+                    if (enemy_marbles.contains(marble)) return error.CannotPushEnemy;
+                }
+
+                inline for (moved, mv.chain[0..moved.len]) |moved_marble, old| {
+                    const i = marbles.find(old) orelse unreachable;
+                    marbles.items[i] = moved_marble;
+                }
+            },
+            .Broadside3 => {
+                const moved: [3]AxialVector = .{
+                    mv.chain[0].add(move_vec),
+                    mv.chain[1].add(move_vec),
+                    mv.chain[2].add(move_vec),
+                };
+
+                inline for (moved) |marble| {
+                    if (marble.out_of_bounds()) return error.OutOfBounds;
+                    if (marbles.contains(marble)) return error.CannotPushSelf;
+                    if (enemy_marbles.contains(marble)) return error.CannotPushEnemy;
+                }
+
+                inline for (moved, mv.chain[0..moved.len]) |moved_marble, old| {
+                    const i = marbles.find(old) orelse unreachable;
+                    marbles.items[i] = moved_marble;
+                }
+            },
+            .Inline2 => {
+                // Explanation: With an `Inline2` I can move if the ray
+                // in front of head is: [empty] or [enemy empty]
+                const r1 = mv.chain[0].add(move_vec);
+                const r2 = r1.add(move_vec);
+
+                if (marbles.contains(r1)) return error.CannotPushSelf;
+                if (enemy_marbles.find(r1)) |idx| {
+                    // We cant push [enemy friend]
+                    if (marbles.contains(r2)) return error.CannotPushSelf;
+                    // We cant push [enemy enemy]
+                    if (enemy_marbles.contains(r2)) return error.CannotPushEnemy;
+
+                    // Move the old marble to the r2 position
+                    enemy_marbles.items[idx] = r2;
+                    // Move the tail to r1
+                    const tail_idx = marbles.find(mv.chain[1]) orelse return error.ChainNotOwned;
+                    marbles.items[tail_idx] = r1;
+                    return;
+                } else {
+                    // we have [empty]. move the tail to r1
+                    const tail_idx = marbles.find(mv.chain[1]) orelse return error.ChainNotOwned;
+                    marbles.items[tail_idx] = r1;
+                    return;
+                }
+                self.clean_your_balls();
+            },
+            .Inline3 => {
+                const r1 = mv.chain[0].add(move_vec);
+                if (r1.out_of_bounds()) return error.OutOfBounds;
+
+                const r2 = r1.add(move_vec);
+                const r3 = r2.add(move_vec);
+
+                for (mv.chain) |pt| {
+                    std.debug.print("r1r2r3 = {any} {any} {any}\n", .{
+                        r1.if_in_bounds(),
+                        r2.if_in_bounds(),
+                        r3.if_in_bounds(),
+                    });
+
+                    std.debug.assert(pt != r1);
+                }
+
+                if (enemy_marbles.find(r1)) |enemy_idx| {
+                    if (enemy_marbles.contains(r2)) {
+                        // [enemy enemy x]
+
+                        if (enemy_marbles.contains(r3)) return error.CannotPushEnemy;
+                        if (marbles.contains(r3)) return error.CannotPushSelf;
+
+                        // move enemy to r3
+                        enemy_marbles.items[enemy_idx] = r3;
+
+                        // move friend to r1
+                        const friend_idx = marbles.find(mv.chain[2]) orelse unreachable;
+                        marbles.items[friend_idx] = r1;
+                    } else if (!marbles.contains(r2)) {
+                        // [enemy x]
+
+                        // move enemy to r2 and do bounds check
+                        if (r2.out_of_bounds()) {
+                            enemy_marbles.swap_remove(enemy_idx);
+                            friend.score += 1;
+                        } else {
+                            enemy_marbles.items[enemy_idx] = r2;
+                        }
+
+                        // move friend to r1
+                        const friend_idx = marbles.find(mv.chain[2]) orelse unreachable;
+                        marbles.items[friend_idx] = r1;
+                    }
+                } else if (!marbles.contains(r1)) {
+                    // [x]
+                    // move friend to r1
+                    const friend_idx = marbles.find(mv.chain[2]) orelse unreachable;
+                    marbles.items[friend_idx] = r1;
+                }
+            },
         }
     }
 
@@ -237,13 +374,18 @@ pub const State = struct {
             self.screen_width,
             self.screen_height,
         ).if_in_bounds();
+
+        // Update the chosen direction for selected balls
+        const mp = self.mouse_position orelse return;
+        switch (self.turn_state) {
+            .ChoosingDirection => |*mv| {
+                mv.dir = compute_best_fit_dir(mp, mv.balls.marbles.const_slice()) catch null;
+            },
+            else => {},
+        }
     }
 
-    pub fn render_background_hexagons(
-        self: *const @This(),
-        renderer: *const sdl3.render.Renderer,
-        screen_factor: f32,
-    ) !void {
+    pub fn render_background_hexagons(self: *const @This(), renderer: *const sdl3.render.Renderer) !void {
         const hexagon_scale = 0.95;
 
         var background_hexagon = geometry.Hexagon{};
@@ -283,7 +425,6 @@ pub const State = struct {
     pub fn render_circles(
         renderer: *const sdl3.render.Renderer,
         circles: []const AxialVector,
-        screen_factor: f32,
         color: geometry.Color,
     ) !void {
         const ball_scale = 0.65;
@@ -305,16 +446,14 @@ pub const State = struct {
     }
 
     pub fn render(self: *const @This(), renderer: *const sdl3.render.Renderer) !void {
-        const screen_factor = @import("main.zig").logical_size * 0.5;
 
         // background
-        try self.render_background_hexagons(renderer, screen_factor);
+        try self.render_background_hexagons(renderer);
 
         // p1
         try State.render_circles(
             renderer,
             self.p1.marbles.const_slice(),
-            screen_factor,
             geometry.white,
         );
 
@@ -322,7 +461,6 @@ pub const State = struct {
         try State.render_circles(
             renderer,
             self.p2.marbles.const_slice(),
-            screen_factor,
             geometry.black,
         );
 
@@ -331,71 +469,72 @@ pub const State = struct {
                 try State.render_circles(
                     renderer,
                     mv.balls.marbles.const_slice(),
-                    screen_factor,
                     geometry.grey,
                 );
             },
 
             .ChoosingDirection => |mv| {
+                std.debug.assert(mv.balls.marbles.len >= 1);
+
                 try State.render_circles(
                     renderer,
                     mv.balls.marbles.const_slice(),
-                    screen_factor,
                     geometry.grey,
                 );
 
-                std.debug.assert(mv.balls.marbles.len >= 1);
+                // Render the next move if any
+                if (mv.dir) |move_dir| {
+                    var moved_balls = pt_array.PointArray(3).empty;
 
-                if (self.mouse_position) |pos| {
-                    var q: f32, var r: f32 = .{ 0.0, 0.0 };
-
-                    // Compute the average vector to the mouse position and normalize to get the angle
-                    {
-                        for (mv.balls.marbles.const_slice()) |marble| {
-                            const diffvec = pos.sub(marble);
-                            q += @floatFromInt(diffvec.q);
-                            r += @floatFromInt(diffvec.r);
-                        }
-
-                        const size = (@abs(q) + @abs(q + r) + @abs(r)) * 0.5;
-                        if (size == 0) return;
-                        q /= size;
-                        r /= size;
-                    }
-
-                    // Compute the move direction which best suits this mouse position.
-                    var dist = std.math.inf(f32);
-                    var best_dir = Direction.l;
-                    inline for (0..@typeInfo(Direction).@"enum".fields.len) |dir_idx| {
-                        const dir: Direction = @enumFromInt(dir_idx);
-                        const dir_vec = dir.to_axial_vector();
-                        const fq: f32 = @floatFromInt(dir_vec.q);
-                        const fr: f32 = @floatFromInt(dir_vec.r);
-
-                        const new_dist = (@abs(q - fq) + @abs(q + r - fq - fr) + @abs(r - fr)) * 0.5;
-                        if (new_dist < dist) {
-                            dist = new_dist;
-                            best_dir = dir;
-                        }
-                    }
-
-                    // Simulate moving the balls in this direction
-                    var balls = mv.balls;
-                    for (balls.marbles.slice()) |*ball| {
-                        ball.* = ball.add(best_dir.to_axial_vector());
+                    for (mv.balls.marbles.const_slice()) |ball| {
+                        const moved_ball = ball.add(move_dir.to_axial_vector());
+                        if (moved_ball.out_of_bounds()) return;
+                        moved_balls.append(moved_ball);
                     }
 
                     try State.render_circles(
                         renderer,
-                        balls.marbles.const_slice(),
-                        screen_factor,
+                        moved_balls.const_slice(),
                         geometry.light_grey,
                     );
                 }
             },
-
-            // we don't render anything special for this state
-            .ProcessMove => return,
         }
     }
 };
+
+pub fn compute_best_fit_dir(mouse_position: AxialVector, balls: []const AxialVector) error{DivideByZero}!Direction {
+    var q: f32, var r: f32 = .{ 0.0, 0.0 };
+
+    // Compute the average vector to the mouse position and normalize to get the angle
+    {
+        for (balls) |marble| {
+            const diffvec = mouse_position.sub(marble);
+            q += @floatFromInt(diffvec.q);
+            r += @floatFromInt(diffvec.r);
+        }
+
+        const size = (@abs(q) + @abs(q + r) + @abs(r)) * 0.5;
+        if (size == 0) return error.DivideByZero;
+        q /= size;
+        r /= size;
+    }
+
+    // Compute the move direction which best suits this mouse position.
+    var dist = std.math.inf(f32);
+    var best_dir = Direction.l;
+    inline for (0..@typeInfo(Direction).@"enum".fields.len) |dir_idx| {
+        const dir: Direction = @enumFromInt(dir_idx);
+        const dir_vec = dir.to_axial_vector();
+        const fq: f32 = @floatFromInt(dir_vec.q);
+        const fr: f32 = @floatFromInt(dir_vec.r);
+
+        const new_dist = (@abs(q - fq) + @abs(q + r - fq - fr) + @abs(r - fr)) * 0.5;
+        if (new_dist < dist) {
+            dist = new_dist;
+            best_dir = dir;
+        }
+    }
+
+    return best_dir;
+}
