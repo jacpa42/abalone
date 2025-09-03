@@ -19,18 +19,18 @@ pub fn main() !void {
 
     var state = State{ .screen_width = 1000, .screen_height = 1000 };
 
-    var window_flags = sdl3.video.Window.Flags{
+    try sdl3.video.gl.setAttribute(.multi_sample_buffers, 1);
+    try sdl3.video.gl.setAttribute(.multi_sample_samples, 16);
+
+    const window_flags = sdl3.video.Window.Flags{
         .always_on_top = true,
+        .high_pixel_density = true,
         .keyboard_grabbed = true,
         .resizable = false,
         .borderless = true,
+        .transparent = true,
+        .open_gl = true,
     };
-
-    switch (@import("builtin").target.os.tag) {
-        .macos => window_flags.metal = true,
-        .linux => window_flags.open_gl = true,
-        else => std.log.err("Get a real operating system.", .{}),
-    }
 
     // Create a rendering context and window
     const gfx = try sdl3.render.Renderer.initWithWindow(

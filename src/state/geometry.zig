@@ -1,19 +1,14 @@
 const std = @import("std");
 const sdl3 = @import("sdl3");
+pub const color = @import("color.zig");
 
-pub const Color = sdl3.pixels.FColor;
 const Renderer = sdl3.render.Renderer;
 const Point = sdl3.rect.FPoint;
 const Vertex = sdl3.render.Vertex;
+const rgba = color.rgba;
 
 const size = @import("../axial.zig").AxialVector.radius;
-
-pub const grey = Color{ .r = 114.0 / 255.0, .g = 113.0 / 255.0, .b = 105.0 / 255.0, .a = 1.0 };
-pub const light_grey = Color{ .r = 114.0 / 255.0, .g = 113.0 / 255.0, .b = 105.0 / 255.0, .a = 0.5 };
-pub const white = Color{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 1.0 };
-pub const black = Color{ .r = 1.0, .g = 1.0, .b = 1.0, .a = 1.0 };
-pub const purple = Color{ .r = 202.0 / 255.0, .g = 158.0 / 255.0, .b = 230.0 / 255.0, .a = 1.0 };
-pub const red = Color{ .r = 232.0 / 255.0, .g = 36.0 / 255.0, .b = 36.0 / 255.0, .a = 1.0 };
+const default_palette = color.kanagawa_wave;
 
 pub const Hexagon = Poly(6, std.math.pi / 6.0, size);
 pub const Circle = Poly(20, 0, size);
@@ -39,7 +34,7 @@ fn default_vertices(comptime num_sides: comptime_int, angle_offset: f32, radius:
     var vertices: [num_vertices]Vertex = undefined;
 
     // Set colors
-    for (&vertices) |*vertex| vertex.color = grey;
+    for (&vertices) |*vertex| vertex.color = default_palette.black.sdl();
 
     vertices[0].position = .{ .x = 0, .y = 0 };
 
@@ -73,10 +68,8 @@ pub fn Poly(comptime num_sides: comptime_int, angle_offset: f32, radius: f32) ty
             }
         }
 
-        pub fn color(self: *@This(), col: Color) void {
-            inline for (&self.vertices) |*vertex| {
-                vertex.color = col;
-            }
+        pub fn color(self: *@This(), col: rgba) void {
+            for (&self.vertices) |*vertex| vertex.color = col.sdl();
         }
 
         /// A little thing i made which translates between the -1 to 1 coordinates used by open gl and the window coordinates used by sdl3.

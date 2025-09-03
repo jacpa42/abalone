@@ -101,14 +101,14 @@ pub const Move = struct {
                     // 0 -> 1 is in the same direction as the move_dir
                     .pos => return Move{
                         .move_type = .Inline2,
-                        .chain = .{ points[0], points[1], undefined },
+                        .chain = .{ points[1], points[0], undefined },
                         .dir = move_dir,
                     },
 
                     // 0 -> 1 is in the opposite direction as the move_dir
                     .neg => return Move{
                         .move_type = .Inline2,
-                        .chain = .{ points[1], points[0], undefined },
+                        .chain = .{ points[0], points[1], undefined },
                         .dir = move_dir,
                     },
                 }

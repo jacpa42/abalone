@@ -72,11 +72,11 @@ pub const AxialVector = packed struct {
     }
 
     /// Computes the Manhatten distance.
-    pub inline fn dist(self: @This(), other: @This()) u8 {
+    pub inline fn dist(self: @This(), other: @This()) u16 {
         return self.sub(other).size();
     }
 
-    pub inline fn size(self: @This()) u8 {
+    pub inline fn size(self: @This()) u16 {
         return (@abs(self.q) + @abs(self.q + self.r) + @abs(self.r)) >> 1;
     }
 
@@ -102,9 +102,11 @@ pub const AxialVector = packed struct {
 
     /// Checks that the vectors are parallel and whether they are in the same quadrant
     ///
-    /// `pos` : The vectors face the same direction.
-    /// `neg` : The vectors face opposite directions.
-    pub inline fn alignment(self: @This(), other: @This()) Alignment {
+    /// `pos`  : The vectors face the same direction.
+    /// `neg`  : The vectors face opposite directions.
+    /// `null` : Not parallel
+    pub inline fn alignment(self: @This(), other: @This()) ?Alignment {
+        if (!self.parallel(other)) return null;
         if (self == zero or other == zero) return .pos;
 
         // By xoring the sign bit we get whether they have the same or different signs

@@ -8,6 +8,8 @@ const AxialVector = @import("axial.zig").AxialVector;
 const Direction = move.HexagonalDirection;
 const Marbles = pt_array.PointArray(14);
 
+const theme = geometry.color.catppuccin_frappe;
+
 const screen_factor = @import("main.zig").logical_size * 0.5;
 
 /// Basically a cyclical array of ball indicies for the current player
@@ -128,7 +130,7 @@ const TurnState = union(TurnStateEnum) {
     },
 
     pub const default = TurnState{
-        .ChoosingChain = .{ .turn = .p1, .balls = .{} },
+        .ChoosingChain = .{ .turn = .p2, .balls = .{} },
     };
 
     /// Trys to advance state, will fail in certain situations.
@@ -151,6 +153,22 @@ const TurnState = union(TurnStateEnum) {
             },
         }
     }
+
+    pub fn previous(self: @This()) @This() {
+        switch (self) {
+            .ChoosingChain => |mv| {
+                return TurnState{
+                    .ChoosingChain = .{ .turn = mv.turn, .balls = .{} },
+                };
+            },
+
+            .ChoosingDirection => |mv| {
+                return TurnState{
+                    .ChoosingChain = .{ .turn = mv.turn, .balls = mv.balls },
+                };
+            },
+        }
+    }
 };
 
 pub const State = struct {
@@ -158,7 +176,6 @@ pub const State = struct {
     quit: bool = false,
     screen_width: f32,
     screen_height: f32,
-
     p1: Player = .{ .marbles = pt_array.white },
     p2: Player = .{ .marbles = pt_array.black },
     mouse_position: ?AxialVector = null,
@@ -166,10 +183,15 @@ pub const State = struct {
 
     pub fn process_keydown(self: *@This(), key: sdl3.keycode.Keycode) void {
         switch (key) {
-            .escape => self.quit = true,
+            .delete => self.quit = true,
+            .escape => {
+                self.turn_state = self.turn_state.previous();
+            },
             // TODO: select the current balls, choose the move and then execute and swap turns
-            .return_key => {
-                self.turn_state = self.turn_state.next() orelse return;
+            .space, .return_key => {
+                if (self.turn_state == .ChoosingChain) {
+                    self.turn_state = self.turn_state.next() orelse return;
+                }
             },
 
             .r => {
@@ -209,7 +231,7 @@ pub const State = struct {
                     std.log.err("Failed to construct move: {}", .{e});
                     return;
                 };
-                self.try_do_move(mv.turn, player_move) catch |e| {
+                self.do_move(mv.turn, player_move) catch |e| {
                     std.log.err("Failed to do move: {}", .{e});
                     return;
                 };
@@ -220,7 +242,7 @@ pub const State = struct {
         }
     }
 
-    pub fn try_do_move(
+    pub fn do_move(
         self: *@This(),
         turn: Turn,
         mv: move.Move,
@@ -285,11 +307,23 @@ pub const State = struct {
                     marbles.items[i] = moved_marble;
                 }
             },
+
             .Inline2 => {
                 // Explanation: With an `Inline2` I can move if the ray
                 // in front of head is: [empty] or [enemy empty]
                 const r1 = mv.chain[0].add(move_vec);
+                if (r1.out_of_bounds()) return error.OutOfBounds;
+
                 const r2 = r1.add(move_vec);
+
+                for (mv.chain[0..2]) |pt| {
+                    std.debug.print("r1r2 = {any} {any}\n", .{
+                        r1.if_in_bounds(),
+                        r2.if_in_bounds(),
+                    });
+
+                    std.debug.assert(pt != r1);
+                }
 
                 if (marbles.contains(r1)) return error.CannotPushSelf;
                 if (enemy_marbles.find(r1)) |idx| {
@@ -389,7 +423,7 @@ pub const State = struct {
         const hexagon_scale = 0.95;
 
         var background_hexagon = geometry.Hexagon{};
-        background_hexagon.color(geometry.purple);
+        background_hexagon.color(theme.magenta);
         background_hexagon.scale(hexagon_scale);
 
         // Render background tiles
@@ -414,7 +448,7 @@ pub const State = struct {
         if (self.mouse_position) |hex| {
             const x, const y = hex.to_pixel_vec();
 
-            background_hexagon.color(geometry.red);
+            background_hexagon.color(theme.red);
             background_hexagon.shift(x + 1, y + 1);
             background_hexagon.scale(screen_factor);
 
@@ -425,7 +459,7 @@ pub const State = struct {
     pub fn render_circles(
         renderer: *const sdl3.render.Renderer,
         circles: []const AxialVector,
-        color: geometry.Color,
+        color: geometry.color.rgba,
     ) !void {
         const ball_scale = 0.65;
 
@@ -454,14 +488,14 @@ pub const State = struct {
         try State.render_circles(
             renderer,
             self.p1.marbles.const_slice(),
-            geometry.white,
+            theme.white,
         );
 
         // p2
         try State.render_circles(
             renderer,
             self.p2.marbles.const_slice(),
-            geometry.black,
+            theme.black,
         );
 
         switch (self.turn_state) {
@@ -469,7 +503,7 @@ pub const State = struct {
                 try State.render_circles(
                     renderer,
                     mv.balls.marbles.const_slice(),
-                    geometry.grey,
+                    theme.red,
                 );
             },
 
@@ -479,7 +513,7 @@ pub const State = struct {
                 try State.render_circles(
                     renderer,
                     mv.balls.marbles.const_slice(),
-                    geometry.grey,
+                    theme.red,
                 );
 
                 // Render the next move if any
@@ -495,7 +529,7 @@ pub const State = struct {
                     try State.render_circles(
                         renderer,
                         moved_balls.const_slice(),
-                        geometry.light_grey,
+                        theme.blue,
                     );
                 }
             },
@@ -515,7 +549,7 @@ pub fn compute_best_fit_dir(mouse_position: AxialVector, balls: []const AxialVec
         }
 
         const size = (@abs(q) + @abs(q + r) + @abs(r)) * 0.5;
-        if (size == 0) return error.DivideByZero;
+        if (size < 1e-2) return error.DivideByZero;
         q /= size;
         r /= size;
     }
