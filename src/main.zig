@@ -6,8 +6,13 @@ const State = @import("state.zig").State;
 const IRect = sdl3.rect.IRect;
 const Key = sdl3.keycode.Keycode;
 
-pub fn main() !void {
-    var state = try State.init();
+pub fn main() error{SdlError}!void {
+    var state = State.init() catch {
+        if (sdl3.errors.get()) |sdlerr| {
+            std.debug.print("Sdl error: {s}\n", .{sdlerr});
+        }
+        return error.SdlError;
+    };
     defer state.deinit();
 
     while (!state.game_state.quit) {
@@ -15,6 +20,11 @@ pub fn main() !void {
         _ = dt;
 
         state.process_events();
-        try state.render();
+        state.render() catch {
+            if (sdl3.errors.get()) |sdlerr| {
+                std.debug.print("Sdl error: {s}\n", .{sdlerr});
+            }
+            return error.SdlError;
+        };
     }
 }

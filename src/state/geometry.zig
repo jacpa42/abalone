@@ -12,6 +12,7 @@ const default_palette = color.kanagawa_wave;
 
 pub const Hexagon = Poly(6, std.math.pi / 6.0, size);
 pub const Circle = Poly(20, 0, size);
+pub const Square = Poly(4, std.math.pi / 4.0, size);
 
 fn default_indices(comptime num_sides: comptime_int) [3 * num_sides]c_int {
     var indices: [3 * num_sides]c_int = undefined;
@@ -36,12 +37,15 @@ fn default_vertices(comptime num_sides: comptime_int, angle_offset: f32, radius:
     // Set colors
     for (&vertices) |*vertex| vertex.color = default_palette.black.sdl();
 
-    vertices[0].position = .{ .x = 0, .y = 0 };
-
-    // Set positions
-    for (vertices[1..], 0..) |*vertex, corner_idx| {
-        const angle = @as(f32, @floatFromInt(corner_idx)) * theta + angle_offset;
-        vertex.position = .{ .x = radius * @cos(angle), .y = radius * @sin(angle) };
+    // Set positions and texture coordinates
+    {
+        vertices[0].position = .{ .x = 0, .y = 0 };
+        vertices[0].tex_coord = .{ .x = 0.5, .y = 0.5 };
+        for (vertices[1..], 0..) |*vertex, corner_idx| {
+            const angle = @as(f32, @floatFromInt(corner_idx)) * theta + angle_offset;
+            vertex.position = .{ .x = radius * @cos(angle), .y = radius * @sin(angle) };
+            vertex.tex_coord = .{ .x = 0.5 + 0.5 * @cos(angle), .y = 0.5 + 0.5 * @sin(angle) };
+        }
     }
 
     return vertices;
@@ -52,7 +56,7 @@ pub fn Poly(comptime num_sides: comptime_int, angle_offset: f32, radius: f32) ty
         vertices: [1 + num_sides]Vertex = default_vertices(num_sides, angle_offset, radius),
         pub const indicies = default_indices(num_sides);
 
-        /// Scales the size of the polygon by a factor
+        /// Moves each vertex position by these coordinates
         pub fn shift(self: *@This(), x: f32, y: f32) void {
             inline for (&self.vertices) |*vertex| {
                 vertex.position.x += x;

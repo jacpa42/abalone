@@ -1,23 +1,51 @@
 const std = @import("std");
 const sdl3 = @import("sdl3");
 
-pub const BlueBall = Texture.load("./textures/blue_ball.pam");
-pub const BlueHeart = Texture.load("./textures/blue_heart.pam");
+pub const Textures = struct {
+    blue_ball: sdl3.render.Texture,
+    red_ball: sdl3.render.Texture,
+    blue_heart: sdl3.render.Texture,
+    red_heart: sdl3.render.Texture,
 
-pub const RedHeart = Texture.load("./textures/red_heart.pam");
-pub const RedBall = Texture.load("./textures/red_ball.pam");
+    pub fn init(renderer: sdl3.render.Renderer) !@This() {
+        const blue_ball = Texture.load("./textures/blue_ball.pam");
+        const blue_heart = Texture.load("./textures/blue_heart.pam");
+        const red_heart = Texture.load("./textures/red_heart.pam");
+        const red_ball = Texture.load("./textures/red_ball.pam");
+
+        std.log.debug("blue_ball : {any}\n", .{blue_ball});
+
+        return .{
+            .blue_ball = try blue_ball.upload(renderer),
+            .red_ball = try red_ball.upload(renderer),
+            .blue_heart = try blue_heart.upload(renderer),
+            .red_heart = try red_heart.upload(renderer),
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.blue_ball.deinit();
+        self.red_ball.deinit();
+        self.blue_heart.deinit();
+        self.red_heart.deinit();
+    }
+};
 
 const Texture = struct {
     w: usize,
     h: usize,
-    max_byte_value: u8,
+    maxval: u16,
     /// Number of bytes per pixel
     depth: usize,
     format: sdl3.pixels.Format,
     data: []const u8,
 
     /// Uploads texture data to gpu mem
-    pub fn upload(self: *const @This(), renderer: sdl3.render.Renderer) !sdl3.render.Texture {
+    fn upload(self: *const @This(), renderer: sdl3.render.Renderer) !sdl3.render.Texture {
+        std.log.debug("pixel_format: {any}", .{self.format});
+
+        // todo: wtf is happening here?
+
         const tex = try sdl3.render.Texture.init(renderer, self.format, .static, self.w, self.h);
         try tex.update(null, @ptrCast(self.data), self.w * self.depth);
         return tex;
@@ -34,7 +62,7 @@ const Texture = struct {
         return .{
             .w = image.width,
             .h = image.height,
-            .max_byte_value = image.maxval,
+            .maxval = image.maxval,
             .depth = image.depth,
             .format = image.tupltype.sdl(),
             .data = image.data,
@@ -77,12 +105,12 @@ const TuplType = enum {
     /// maxval: 1..65535 depth 4
     RGB_ALPHA,
 
-    pub inline fn sdl(self: @This()) sdl3.pixels.Format {
+    inline fn sdl(self: @This()) sdl3.pixels.Format {
         const f = sdl3.pixels.Format;
         return switch (self) {
-            .BLACKANDWHITE, .GRAYSCALE_ALPHA, .BLACKANDWHITE_ALPHA, .GRAYSCALE => @panic("This bad boy does not have an equivalent sdl3 texture format."),
             .RGB => f.array_rgb_24,
             .RGB_ALPHA => f.array_rgba_32,
+            else => @panic("This bad boy does not have an equivalent sdl3 texture format."),
         };
     }
 };

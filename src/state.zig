@@ -6,6 +6,7 @@ const pt_array = @import("point_array.zig");
 const turn_state = @import("state/turn.zig");
 const texture = @import("textures.zig");
 
+const Textures = texture.Textures;
 const SelectedBalls = @import("state/selected_balls.zig").SelectedBalls;
 const AxialVector = @import("axial.zig").AxialVector;
 const Direction = move.HexagonalDirection;
@@ -64,8 +65,7 @@ pub const State = struct {
     pub inline fn render(self: *@This()) !void {
         if (!self.game_state.redraw_requested) return;
 
-        try self.game_state.render(&self.renderer);
-        try self.renderer.renderTexture(self.textures.blue_ball, null, null);
+        try self.game_state.render(&self.renderer, &self.textures);
         try self.renderer.present();
 
         self.game_state.redraw_requested = false;
@@ -395,9 +395,29 @@ pub const GameState = struct {
         }
     }
 
+    pub fn render_square_texture(
+        renderer: *const sdl3.render.Renderer,
+        positions: []const AxialVector,
+        scale: f32,
+        tex: sdl3.render.Texture,
+    ) !void {
+        var default_square = geometry.Square{};
+        default_square.scale(scale);
+
+        for (positions) |pos| {
+            const x, const y = pos.to_pixel_vec();
+
+            var square = default_square;
+            square.shift(x + 1, y + 1);
+            square.scale(screen_factor);
+
+            try renderer.renderGeometry(tex, &square.vertices, &geometry.Square.indicies);
+        }
+    }
+
     pub fn render_circles(
         renderer: *const sdl3.render.Renderer,
-        circles: []const AxialVector,
+        positions: []const AxialVector,
         color: geometry.color.rgba,
     ) !void {
         const ball_scale = 0.65;
@@ -406,7 +426,7 @@ pub const GameState = struct {
         default_circle.color(color);
         default_circle.scale(ball_scale);
 
-        for (circles) |marble| {
+        for (positions) |marble| {
             const x, const y = marble.to_pixel_vec();
 
             var circle = default_circle;
@@ -418,10 +438,10 @@ pub const GameState = struct {
         }
     }
 
-    pub fn render(self: *const @This(), renderer: *const sdl3.render.Renderer) !void {
-        // background
-        try self.render_background_hexagons(renderer);
-
+    pub fn render_player_marbles(
+        self: *const @This(),
+        renderer: *const sdl3.render.Renderer,
+    ) !void {
         switch (self.turn_state) {
             .ChoosingChain => |mv| {
                 // p1
@@ -490,32 +510,101 @@ pub const GameState = struct {
             },
         }
     }
+    pub fn render_player_marbles_textured(
+        self: *const @This(),
+        renderer: *const sdl3.render.Renderer,
+        textures: *const Textures,
+    ) !void {
+        const ball_scale = 0.65;
+        switch (self.turn_state) {
+            .ChoosingChain => |mv| {
+                try GameState.render_square_texture(
+                    renderer,
+                    self.p1.marbles.const_slice(),
+                    ball_scale,
+                    textures.blue_ball,
+                );
+
+                // p2
+                try GameState.render_square_texture(
+                    renderer,
+                    self.p2.marbles.const_slice(),
+                    ball_scale,
+                    textures.red_ball,
+                );
+
+                _ = mv;
+                // try GameState.render_square_texture(
+                //     renderer,
+                //     mv.balls.marbles.const_slice(),
+                //     ball_scale,
+                //     textures.blue_ball,
+                // );
+            },
+
+            .ChoosingDirection => |choosing_dir| {
+                std.debug.assert(choosing_dir.balls.marbles.len >= 1);
+
+                // Render the next move if any
+                if (choosing_dir.dir) |move_dir| {
+                    const mv = move.Move.new(choosing_dir.balls.marbles.const_slice(), move_dir);
+                    var self_cpy = self.*;
+                    self_cpy.do_move(choosing_dir.turn, mv) catch {};
+
+                    // p1
+                    try GameState.render_square_texture(
+                        renderer,
+                        self_cpy.p1.marbles.const_slice(),
+                        ball_scale,
+                        textures.blue_ball,
+                    );
+
+                    // p2
+                    try GameState.render_square_texture(
+                        renderer,
+                        self_cpy.p2.marbles.const_slice(),
+                        ball_scale,
+                        textures.red_ball,
+                    );
+                } else {
+                    try GameState.render_square_texture(
+                        renderer,
+                        self.p1.marbles.const_slice(),
+                        ball_scale,
+                        textures.blue_ball,
+                    );
+
+                    // p2
+                    try GameState.render_square_texture(
+                        renderer,
+                        self.p2.marbles.const_slice(),
+                        ball_scale,
+                        textures.red_ball,
+                    );
+
+                    try GameState.render_square_texture(
+                        renderer,
+                        choosing_dir.balls.marbles.const_slice(),
+                        ball_scale,
+                        textures.blue_ball,
+                    );
+                }
+            },
+        }
+    }
+
+    pub fn render(
+        self: *const @This(),
+        renderer: *const sdl3.render.Renderer,
+        textures: *const Textures,
+    ) !void {
+        // background
+        try self.render_background_hexagons(renderer);
+        try self.render_player_marbles_textured(renderer, textures);
+    }
 };
 
 pub const Player = struct {
     score: u3 = 0,
     marbles: Marbles,
-};
-
-pub const Textures = struct {
-    blue_ball: sdl3.render.Texture,
-    red_ball: sdl3.render.Texture,
-    blue_heart: sdl3.render.Texture,
-    red_heart: sdl3.render.Texture,
-
-    pub fn init(renderer: sdl3.render.Renderer) !@This() {
-        return .{
-            .blue_ball = try texture.BlueBall.upload(renderer),
-            .red_ball = try texture.RedBall.upload(renderer),
-            .blue_heart = try texture.BlueHeart.upload(renderer),
-            .red_heart = try texture.RedHeart.upload(renderer),
-        };
-    }
-
-    pub fn deinit(self: *@This()) void {
-        self.blue_ball.deinit();
-        self.red_ball.deinit();
-        self.blue_heart.deinit();
-        self.red_heart.deinit();
-    }
 };
