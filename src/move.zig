@@ -78,9 +78,8 @@ pub const Move = struct {
     dir: HexagonalDirection,
 
     /// Constructs a new move. The points put into this function are assumed to be hexagonally aligned.
-    pub fn new(points: []const AxialVector, move_dir: HexagonalDirection) error{ NoPoints, TooManyPoints }!@This() {
+    pub fn new(points: []const AxialVector, move_dir: HexagonalDirection) @This() {
         switch (points.len) {
-            0 => return error.NoPoints,
             1 => return Move{
                 .move_type = .Inline1,
                 .chain = .{ points[0], undefined, undefined },
@@ -157,7 +156,7 @@ pub const Move = struct {
                 unreachable;
             },
 
-            else => return error.TooManyPoints,
+            else => unreachable,
         }
     }
 };

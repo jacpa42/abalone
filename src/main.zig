@@ -29,6 +29,8 @@ pub fn main() !void {
         .resizable = false,
         .borderless = true,
         .transparent = true,
+        .mouse_capture = true,
+        .mouse_grabbed = true,
         .open_gl = true,
     };
 

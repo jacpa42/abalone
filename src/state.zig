@@ -8,7 +8,7 @@ const AxialVector = @import("axial.zig").AxialVector;
 const Direction = move.HexagonalDirection;
 const Marbles = pt_array.PointArray(14);
 
-const theme = geometry.color.catppuccin_frappe;
+const theme = geometry.color.kanagawa_wave;
 
 const screen_factor = @import("main.zig").logical_size * 0.5;
 
@@ -227,10 +227,7 @@ pub const State = struct {
             },
             .ChoosingDirection => |mv| {
                 const mv_dir = mv.dir orelse return;
-                const player_move = move.Move.new(mv.balls.marbles.const_slice(), mv_dir) catch |e| {
-                    std.log.err("Failed to construct move: {}", .{e});
-                    return;
-                };
+                const player_move = move.Move.new(mv.balls.marbles.const_slice(), mv_dir);
                 self.do_move(mv.turn, player_move) catch |e| {
                     std.log.err("Failed to do move: {}", .{e});
                     return;
@@ -316,14 +313,7 @@ pub const State = struct {
 
                 const r2 = r1.add(move_vec);
 
-                for (mv.chain[0..2]) |pt| {
-                    std.debug.print("r1r2 = {any} {any}\n", .{
-                        r1.if_in_bounds(),
-                        r2.if_in_bounds(),
-                    });
-
-                    std.debug.assert(pt != r1);
-                }
+                for (mv.chain[0..2]) |pt| std.debug.assert(pt != r1);
 
                 if (marbles.contains(r1)) return error.CannotPushSelf;
                 if (enemy_marbles.find(r1)) |idx| {
@@ -353,15 +343,7 @@ pub const State = struct {
                 const r2 = r1.add(move_vec);
                 const r3 = r2.add(move_vec);
 
-                for (mv.chain) |pt| {
-                    std.debug.print("r1r2r3 = {any} {any} {any}\n", .{
-                        r1.if_in_bounds(),
-                        r2.if_in_bounds(),
-                        r3.if_in_bounds(),
-                    });
-
-                    std.debug.assert(pt != r1);
-                }
+                for (mv.chain) |pt| std.debug.assert(pt != r1);
 
                 if (enemy_marbles.find(r1)) |enemy_idx| {
                     if (enemy_marbles.contains(r2)) {
@@ -484,22 +466,22 @@ pub const State = struct {
         // background
         try self.render_background_hexagons(renderer);
 
-        // p1
-        try State.render_circles(
-            renderer,
-            self.p1.marbles.const_slice(),
-            theme.white,
-        );
-
-        // p2
-        try State.render_circles(
-            renderer,
-            self.p2.marbles.const_slice(),
-            theme.black,
-        );
-
         switch (self.turn_state) {
             .ChoosingChain => |mv| {
+                // p1
+                try State.render_circles(
+                    renderer,
+                    self.p1.marbles.const_slice(),
+                    theme.white,
+                );
+
+                // p2
+                try State.render_circles(
+                    renderer,
+                    self.p2.marbles.const_slice(),
+                    theme.black,
+                );
+
                 try State.render_circles(
                     renderer,
                     mv.balls.marbles.const_slice(),
@@ -507,29 +489,46 @@ pub const State = struct {
                 );
             },
 
-            .ChoosingDirection => |mv| {
-                std.debug.assert(mv.balls.marbles.len >= 1);
-
-                try State.render_circles(
-                    renderer,
-                    mv.balls.marbles.const_slice(),
-                    theme.red,
-                );
+            .ChoosingDirection => |choosing_dir| {
+                std.debug.assert(choosing_dir.balls.marbles.len >= 1);
 
                 // Render the next move if any
-                if (mv.dir) |move_dir| {
-                    var moved_balls = pt_array.PointArray(3).empty;
+                if (choosing_dir.dir) |move_dir| {
+                    const mv = move.Move.new(choosing_dir.balls.marbles.const_slice(), move_dir);
+                    var self_cpy = self.*;
+                    self_cpy.do_move(choosing_dir.turn, mv) catch {};
 
-                    for (mv.balls.marbles.const_slice()) |ball| {
-                        const moved_ball = ball.add(move_dir.to_axial_vector());
-                        if (moved_ball.out_of_bounds()) return;
-                        moved_balls.append(moved_ball);
-                    }
+                    // p1
+                    try State.render_circles(
+                        renderer,
+                        self_cpy.p1.marbles.const_slice(),
+                        theme.white,
+                    );
+
+                    // p2
+                    try State.render_circles(
+                        renderer,
+                        self_cpy.p2.marbles.const_slice(),
+                        theme.black,
+                    );
+                } else {
+                    try State.render_circles(
+                        renderer,
+                        self.p1.marbles.const_slice(),
+                        theme.white,
+                    );
+
+                    // p2
+                    try State.render_circles(
+                        renderer,
+                        self.p2.marbles.const_slice(),
+                        theme.black,
+                    );
 
                     try State.render_circles(
                         renderer,
-                        moved_balls.const_slice(),
-                        theme.blue,
+                        choosing_dir.balls.marbles.const_slice(),
+                        theme.red,
                     );
                 }
             },
