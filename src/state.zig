@@ -334,7 +334,6 @@ pub const State = struct {
                     marbles.items[tail_idx] = r1;
                     return;
                 }
-                self.clean_your_balls();
             },
             .Inline3 => {
                 const r1 = mv.chain[0].add(move_vec);
