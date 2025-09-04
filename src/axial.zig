@@ -45,7 +45,7 @@ pub const AxialVector = packed struct {
     /// The `radius` parameter is the radius of the maximal circle inscribed in the hexagon.
     ///
     /// [https://www.redblobgames.com/grids/hexagons/#pixel-to-hex]
-    pub fn from_pixel_vec_screen_space(x: f32, y: f32, screen_width: f32, screen_height: f32) @This() {
+    pub inline fn from_pixel_vec_screen_space(x: f32, y: f32, screen_width: f32, screen_height: f32) @This() {
         return @This().from_pixel_vec(
             2.0 * (x / screen_width) - 1,
             2.0 * (y / screen_height) - 1,

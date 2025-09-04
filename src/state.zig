@@ -3,187 +3,106 @@ const sdl3 = @import("sdl3");
 const geometry = @import("state/geometry.zig");
 const move = @import("move.zig");
 const pt_array = @import("point_array.zig");
+const turn_state = @import("state/turn.zig");
+const texture = @import("textures.zig");
 
+const SelectedBalls = @import("state/selected_balls.zig").SelectedBalls;
 const AxialVector = @import("axial.zig").AxialVector;
 const Direction = move.HexagonalDirection;
 const Marbles = pt_array.PointArray(14);
+const TurnState = turn_state.TurnState;
+const Turn = turn_state.Turn;
 
-const theme = geometry.color.kanagawa_wave;
+const compute_best_fit_dir = turn_state.compute_best_fit_dir;
 
-const screen_factor = @import("main.zig").logical_size * 0.5;
-
-/// Basically a cyclical array of ball indicies for the current player
-const SelectedBalls = struct {
-    marbles: pt_array.PointArray(3) = .empty,
-
-    /// Trys to unselect a ball
-    ///
-    /// - The ball must be selected.
-    /// - The ball cannot break a chain (only in the case of 3 balls)
-    pub fn try_deselect(self: *@This(), item: AxialVector) bool {
-        const i = self.marbles.find(item) orelse return false;
-
-        // If we have selected 3 then we can't deselect center.
-        if (self.marbles.len == 3) {
-            // get the other two indices
-            const a = @mod(i + 1, 3);
-            const b = @mod(i + 2, 3);
-            const vec_ai = item.sub(self.marbles.items[a]);
-            const vec_bi = item.sub(self.marbles.items[b]);
-
-            // If they are both 1 then the selected must be in the middle of them!
-            if (vec_ai.size() == vec_bi.size()) {
-                std.log.info("Cannot deselect center of triplet!!", .{});
-                return false;
-            }
-        }
-
-        self.marbles.swap_remove(i);
-        return true;
-    }
-
-    /// Will try to pick the ball. All the following are checked:
-    ///
-    /// - That we have >=1 capacity to store a marble.
-    /// - All balls must be in bounds.
-    /// - All balls must be a neighbour.
-    /// - All balls need to match the player color.
-    /// - All balls need to be in a straight line.
-    pub fn try_select(
-        self: *@This(),
-        same_color_marbles: *const Marbles,
-        item: AxialVector,
-    ) bool {
-        // We can have at most 3 marbles
-        if (self.marbles.len == 3) return false;
-
-        // Check that the ball is in bounds
-        if (item.out_of_bounds()) return false;
-
-        // Check that the ball is a neighbour
-        if (!self.is_neighbour(item)) return false;
-
-        // Check that the balls are the same color
-        if (!same_color_marbles.contains(item)) return false;
-
-        // If we have 2 balls then we need to check alignment of the third
-        if (self.marbles.len == 2) {
-            // 0 -> p vec
-            const vec0p = item.sub(self.marbles.items[0]);
-            // 1 -> p vec
-            const vec1p = item.sub(self.marbles.items[1]);
-            // These must be parallel
-            if (!vec0p.parallel(vec1p)) return false;
-        }
-
-        self.marbles.append(item);
-        return true;
-    }
-
-    /// Checks that the `pt` is:
-    ///
-    /// - Not one of the already selected balls
-    /// - 1 distance away from 1 of the balls (if any)
-    pub fn is_neighbour(self: *const @This(), pt: AxialVector) bool {
-        if (self.marbles.len == 0) return true;
-        for (self.marbles.const_slice()) |ball| if (ball == pt) return false;
-        for (self.marbles.const_slice()) |ball| if (ball.dist(pt) == 1) return true;
-
-        return false;
-    }
-};
-
-pub const Player = struct {
-    score: u3 = 0,
-    marbles: Marbles,
-};
-
-/// The game follows this pattern:
-///
-/// 1. Player picks chain.
-/// 2. Player picks direction to move in.
-///
-/// We then process the move and start again
-const TurnStateEnum = enum { ChoosingChain, ChoosingDirection };
-
-const Turn = enum {
-    p1,
-    p2,
-
-    pub fn next(self: @This()) @This() {
-        return switch (self) {
-            .p1 => .p2,
-            .p2 => .p1,
-        };
-    }
-};
-
-const TurnState = union(TurnStateEnum) {
-    ChoosingChain: struct {
-        turn: Turn,
-        balls: SelectedBalls,
-    },
-    ChoosingDirection: struct {
-        turn: Turn,
-        balls: SelectedBalls,
-        dir: ?Direction,
-    },
-
-    pub const default = TurnState{
-        .ChoosingChain = .{ .turn = .p1, .balls = .{} },
-    };
-
-    /// Trys to advance state, will fail in certain situations.
-    pub fn next(self: @This(), mouse_pos: ?AxialVector) ?@This() {
-        switch (self) {
-            .ChoosingChain => |mv| {
-                if (mv.balls.marbles.len == 0) return null;
-
-                var dir: ?Direction = null;
-                if (mouse_pos) |pos| {
-                    dir = compute_best_fit_dir(
-                        pos,
-                        mv.balls.marbles.const_slice(),
-                    ) catch null;
-                }
-
-                return TurnState{
-                    .ChoosingDirection = .{
-                        .turn = mv.turn,
-                        .balls = mv.balls,
-                        .dir = dir,
-                    },
-                };
-            },
-
-            .ChoosingDirection => |mv| {
-                return TurnState{ .ChoosingChain = .{ .turn = mv.turn.next(), .balls = .{} } };
-            },
-        }
-    }
-
-    pub fn previous(self: @This()) @This() {
-        switch (self) {
-            .ChoosingChain => |mv| {
-                return TurnState{
-                    .ChoosingChain = .{ .turn = mv.turn, .balls = .{} },
-                };
-            },
-
-            .ChoosingDirection => |mv| {
-                return TurnState{
-                    .ChoosingChain = .{ .turn = mv.turn, .balls = mv.balls },
-                };
-            },
-        }
-    }
-};
+const theme = geometry.color.catppuccin_macchiato;
+const fps = 60;
+const logical_size = 100;
+const inital_screen_width = 1000;
+const inital_screen_height = 1000;
+const screen_factor = logical_size * 0.5;
+const sdl_init_flags = sdl3.InitFlags{ .video = true };
 
 pub const State = struct {
-    /// This represents our playable surface. It is a |q| <= 4, |r| <= 4, |s| <= 4.
+    game_state: GameState = .{},
+    fps_capper: sdl3.extras.FramerateCapper(f32) = .{ .mode = .{ .limited = fps } },
+    window: sdl3.video.Window,
+    renderer: sdl3.render.Renderer,
+    textures: Textures,
+
+    // Initalizes sdl3 and self. You must call `deinit()` to clean up.
+    pub fn init() !@This() {
+        try sdl3.init(sdl_init_flags);
+
+        const window_flags = sdl3.video.Window.Flags{
+            .always_on_top = true,
+            .keyboard_grabbed = true,
+            .resizable = false,
+            .borderless = true,
+            .transparent = true,
+            .mouse_capture = true,
+            .mouse_grabbed = true,
+        };
+
+        // Create a rendering context and window
+        const gfx = try sdl3.render.Renderer.initWithWindow(
+            "abalone",
+            inital_screen_width,
+            inital_screen_height,
+            window_flags,
+        );
+
+        try gfx.renderer.setLogicalPresentation(logical_size, logical_size, .integer_scale);
+
+        return @This(){
+            .window = gfx.window,
+            .renderer = gfx.renderer,
+            .textures = try Textures.init(gfx.renderer),
+        };
+    }
+
+    pub inline fn render(self: *@This()) !void {
+        if (!self.game_state.redraw_requested) return;
+
+        try self.game_state.render(&self.renderer);
+        try self.renderer.renderTexture(self.textures.blue_ball, null, null);
+        try self.renderer.present();
+
+        self.game_state.redraw_requested = false;
+    }
+
+    pub inline fn process_events(self: *@This()) void {
+        while (sdl3.events.poll()) |event| switch (event) {
+            .quit, .terminating => self.game_state.quit = true,
+            .key_down => |keyboard| {
+                const key = keyboard.key orelse continue;
+                self.game_state.process_keydown(key);
+            },
+            .window_resized => |resize| {
+                self.game_state.screen_width = @floatFromInt(resize.width);
+                self.game_state.screen_height = @floatFromInt(resize.height);
+            },
+            .mouse_button_down => |*mb| self.game_state.process_mousebutton_down(mb),
+
+            .mouse_motion => |*mb| self.game_state.process_mouse_moved(mb.x, mb.y),
+            else => {},
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.textures.deinit();
+        self.window.deinit();
+        self.renderer.deinit();
+        sdl3.quit(sdl_init_flags);
+        sdl3.shutdown();
+    }
+};
+
+pub const GameState = struct {
+    redraw_requested: bool = true,
     quit: bool = false,
-    screen_width: f32,
-    screen_height: f32,
+    screen_width: f32 = inital_screen_width,
+    screen_height: f32 = inital_screen_height,
     p1: Player = .{ .marbles = pt_array.white },
     p2: Player = .{ .marbles = pt_array.black },
     mouse_position: ?AxialVector = null,
@@ -194,18 +113,18 @@ pub const State = struct {
             .delete => self.quit = true,
             .escape => {
                 self.turn_state = self.turn_state.previous();
+                self.redraw_requested = true;
             },
-            // TODO: select the current balls, choose the move and then execute and swap turns
-            .space, .return_key => {
+            .space => {
                 if (self.turn_state == .ChoosingChain) {
                     self.turn_state = self.turn_state.next(self.mouse_position) orelse return;
+                    self.redraw_requested = true;
                 }
             },
 
             .r => {
                 self.p1 = .{ .marbles = pt_array.white };
                 self.p2 = .{ .marbles = pt_array.black };
-                self.mouse_position = null;
                 self.turn_state = .default;
             },
             else => {},
@@ -222,32 +141,36 @@ pub const State = struct {
                     self.screen_height,
                 );
 
-                if (!mv.balls.try_deselect(moused_over)) {
-                    const same_color_marbles =
-                        switch (mv.turn) {
-                            .p1 => &self.p1.marbles,
-                            .p2 => &self.p2.marbles,
-                        };
-                    if (!mv.balls.try_select(same_color_marbles, moused_over)) {
-                        std.log.info("Failed to select ball", .{});
-                    } else if (mv.balls.marbles.len == 3) {
-                        self.turn_state = self.turn_state.next(self.mouse_position) orelse return;
-                    }
+                self.redraw_requested = true;
+
+                if (mv.balls.try_deselect(moused_over)) return;
+
+                const same_color_marbles = switch (mv.turn) {
+                    .p1 => &self.p1.marbles,
+                    .p2 => &self.p2.marbles,
+                };
+
+                const ball_selected = mv.balls.try_select(same_color_marbles, moused_over);
+
+                if (ball_selected and mv.balls.marbles.len == 3) {
+                    self.turn_state = self.turn_state.next(self.mouse_position) orelse return;
                 }
             },
+
             .ChoosingDirection => |mv| {
                 const mv_dir = mv.dir orelse return;
                 const player_move = move.Move.new(mv.balls.marbles.const_slice(), mv_dir);
-                self.do_move(mv.turn, player_move) catch |e| {
-                    std.log.err("Failed to do move: {}", .{e});
-                    return;
-                };
+
+                self.do_move(mv.turn, player_move) catch return;
+
+                // on move success redraw
+                self.redraw_requested = true;
 
                 if (self.p1.score >= 6) {
-                    std.debug.print("Player 1 wins!", .{});
+                    std.log.info("Player 1 wins!", .{});
                     self.quit = true;
                 } else if (self.p2.score >= 6) {
-                    std.debug.print("Player 2 wins!", .{});
+                    std.log.info("Player 2 wins!", .{});
                     self.quit = true;
                 }
 
@@ -412,15 +335,21 @@ pub const State = struct {
     }
 
     pub fn process_mouse_moved(self: *@This(), x: f32, y: f32) void {
-        self.mouse_position = AxialVector.from_pixel_vec_screen_space(
-            x,
-            y,
-            self.screen_width,
-            self.screen_height,
-        ).if_in_bounds();
+        const new_pos =
+            AxialVector.from_pixel_vec_screen_space(
+                x,
+                y,
+                self.screen_width,
+                self.screen_height,
+            ).if_in_bounds();
+        if (new_pos == self.mouse_position) return;
+
+        self.mouse_position = new_pos;
+        self.redraw_requested = true;
 
         // Update the chosen direction for selected balls
         const mp = self.mouse_position orelse return;
+
         switch (self.turn_state) {
             .ChoosingDirection => |*mv| {
                 mv.dir = compute_best_fit_dir(mp, mv.balls.marbles.const_slice()) catch null;
@@ -490,27 +419,26 @@ pub const State = struct {
     }
 
     pub fn render(self: *const @This(), renderer: *const sdl3.render.Renderer) !void {
-
         // background
         try self.render_background_hexagons(renderer);
 
         switch (self.turn_state) {
             .ChoosingChain => |mv| {
                 // p1
-                try State.render_circles(
+                try GameState.render_circles(
                     renderer,
                     self.p1.marbles.const_slice(),
                     theme.white,
                 );
 
                 // p2
-                try State.render_circles(
+                try GameState.render_circles(
                     renderer,
                     self.p2.marbles.const_slice(),
                     theme.black,
                 );
 
-                try State.render_circles(
+                try GameState.render_circles(
                     renderer,
                     mv.balls.marbles.const_slice(),
                     theme.red,
@@ -527,33 +455,33 @@ pub const State = struct {
                     self_cpy.do_move(choosing_dir.turn, mv) catch {};
 
                     // p1
-                    try State.render_circles(
+                    try GameState.render_circles(
                         renderer,
                         self_cpy.p1.marbles.const_slice(),
                         theme.white,
                     );
 
                     // p2
-                    try State.render_circles(
+                    try GameState.render_circles(
                         renderer,
                         self_cpy.p2.marbles.const_slice(),
                         theme.black,
                     );
                 } else {
-                    try State.render_circles(
+                    try GameState.render_circles(
                         renderer,
                         self.p1.marbles.const_slice(),
                         theme.white,
                     );
 
                     // p2
-                    try State.render_circles(
+                    try GameState.render_circles(
                         renderer,
                         self.p2.marbles.const_slice(),
                         theme.black,
                     );
 
-                    try State.render_circles(
+                    try GameState.render_circles(
                         renderer,
                         choosing_dir.balls.marbles.const_slice(),
                         theme.red,
@@ -564,38 +492,30 @@ pub const State = struct {
     }
 };
 
-pub fn compute_best_fit_dir(mouse_position: AxialVector, balls: []const AxialVector) error{DivideByZero}!Direction {
-    var q: f32, var r: f32 = .{ 0.0, 0.0 };
+pub const Player = struct {
+    score: u3 = 0,
+    marbles: Marbles,
+};
 
-    // Compute the average vector to the mouse position and normalize to get the angle
-    {
-        for (balls) |marble| {
-            const diffvec = mouse_position.sub(marble);
-            q += @floatFromInt(diffvec.q);
-            r += @floatFromInt(diffvec.r);
-        }
+pub const Textures = struct {
+    blue_ball: sdl3.render.Texture,
+    red_ball: sdl3.render.Texture,
+    blue_heart: sdl3.render.Texture,
+    red_heart: sdl3.render.Texture,
 
-        const size = (@abs(q) + @abs(q + r) + @abs(r)) * 0.5;
-        if (size < 1e-2) return error.DivideByZero;
-        q /= size;
-        r /= size;
+    pub fn init(renderer: sdl3.render.Renderer) !@This() {
+        return .{
+            .blue_ball = try texture.BlueBall.upload(renderer),
+            .red_ball = try texture.RedBall.upload(renderer),
+            .blue_heart = try texture.BlueHeart.upload(renderer),
+            .red_heart = try texture.RedHeart.upload(renderer),
+        };
     }
 
-    // Compute the move direction which best suits this mouse position.
-    var dist = std.math.inf(f32);
-    var best_dir = Direction.l;
-    inline for (0..@typeInfo(Direction).@"enum".fields.len) |dir_idx| {
-        const dir: Direction = @enumFromInt(dir_idx);
-        const dir_vec = dir.to_axial_vector();
-        const fq: f32 = @floatFromInt(dir_vec.q);
-        const fr: f32 = @floatFromInt(dir_vec.r);
-
-        const new_dist = (@abs(q - fq) + @abs(q + r - fq - fr) + @abs(r - fr)) * 0.5;
-        if (new_dist < dist) {
-            dist = new_dist;
-            best_dir = dir;
-        }
+    pub fn deinit(self: *@This()) void {
+        self.blue_ball.deinit();
+        self.red_ball.deinit();
+        self.blue_heart.deinit();
+        self.red_heart.deinit();
     }
-
-    return best_dir;
-}
+};

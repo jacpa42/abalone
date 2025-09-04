@@ -69,19 +69,7 @@ pub fn Poly(comptime num_sides: comptime_int, angle_offset: f32, radius: f32) ty
         }
 
         pub fn color(self: *@This(), col: rgba) void {
-            for (&self.vertices) |*vertex| vertex.color = col.sdl();
-        }
-
-        /// A little thing i made which translates between the -1 to 1 coordinates used by open gl and the window coordinates used by sdl3.
-        ///
-        /// This makes it easier to place things on the screen.
-        pub fn render_transform(self: *@This(), at: Point, screen_width: f32, screen_height: f32) void {
-            std.debug.assert(screen_height > 0);
-            std.debug.assert(screen_width > 0);
-
-            const m = @min(screen_width, screen_height) * 0.5;
-            self.shift(at.x + 1, at.y + 1);
-            self.scale(m);
+            inline for (&self.vertices) |*vertex| vertex.color = col.sdl();
         }
     };
 }

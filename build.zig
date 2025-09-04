@@ -18,7 +18,34 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
 
-    const sdl3 = b.dependency("sdl3", .{ .target = target, .optimize = optimize });
+    const sdl3 = b.dependency("sdl3", .{
+        .target = target,
+        .optimize = optimize,
+
+        // Options passed directly to https://github.com/castholm/SDL (SDL3 C Bindings):
+        .c_sdl_preferred_linkage = std.builtin.LinkMode.dynamic,
+        .c_sdl_strip = true,
+        .c_sdl_sanitize_c = std.zig.SanitizeC.off,
+        .c_sdl_lto = if (@import("builtin").target.os.tag == .macos) .none else .full,
+        // .c_sdl_emscripten_pthreads = false,
+        // .c_sdl_install_build_config_h = false,
+
+        .ext_image = false,
+        // Options if `ext_image` is enabled:
+        // .image_enable_bmp = true,
+        // .image_enable_gif = true,
+        // .image_enable_jpg = true,
+        // .image_enable_lbm = true,
+        // .image_enable_pcx = true,
+        // .image_enable_pnm = true,
+        // .image_enable_qoi = true,
+        // .image_enable_svg = true,
+        // .image_enable_tga = true,
+        // .image_enable_xcf = true,
+        // .image_enable_xpm = true,
+        // .image_enable_xv = true,
+        // .image_enable_png = true,
+    });
 
     exe.root_module.addImport("sdl3", sdl3.module("sdl3"));
 
@@ -38,9 +65,7 @@ pub fn build(b: *std.Build) void {
 
     // This allows the user to pass arguments to the application in the build
     // command itself, like this: `zig build run -- arg1 arg2 etc`
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
+    if (b.args) |args| run_cmd.addArgs(args);
 
     // This creates a build step. It will be visible in the `zig build --help` menu,
     // and can be selected like this: `zig build run`
