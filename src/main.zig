@@ -31,7 +31,6 @@ pub fn main() !void {
         .transparent = true,
         .mouse_capture = true,
         .mouse_grabbed = true,
-        .open_gl = true,
     };
 
     // Create a rendering context and window

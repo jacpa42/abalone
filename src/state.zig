@@ -130,20 +130,28 @@ const TurnState = union(TurnStateEnum) {
     },
 
     pub const default = TurnState{
-        .ChoosingChain = .{ .turn = .p2, .balls = .{} },
+        .ChoosingChain = .{ .turn = .p1, .balls = .{} },
     };
 
     /// Trys to advance state, will fail in certain situations.
-    pub fn next(self: @This()) ?@This() {
+    pub fn next(self: @This(), mouse_pos: ?AxialVector) ?@This() {
         switch (self) {
             .ChoosingChain => |mv| {
                 if (mv.balls.marbles.len == 0) return null;
+
+                var dir: ?Direction = null;
+                if (mouse_pos) |pos| {
+                    dir = compute_best_fit_dir(
+                        pos,
+                        mv.balls.marbles.const_slice(),
+                    ) catch null;
+                }
 
                 return TurnState{
                     .ChoosingDirection = .{
                         .turn = mv.turn,
                         .balls = mv.balls,
-                        .dir = null,
+                        .dir = dir,
                     },
                 };
             },
@@ -190,7 +198,7 @@ pub const State = struct {
             // TODO: select the current balls, choose the move and then execute and swap turns
             .space, .return_key => {
                 if (self.turn_state == .ChoosingChain) {
-                    self.turn_state = self.turn_state.next() orelse return;
+                    self.turn_state = self.turn_state.next(self.mouse_position) orelse return;
                 }
             },
 
@@ -222,6 +230,8 @@ pub const State = struct {
                         };
                     if (!mv.balls.try_select(same_color_marbles, moused_over)) {
                         std.log.info("Failed to select ball", .{});
+                    } else if (mv.balls.marbles.len == 3) {
+                        self.turn_state = self.turn_state.next(self.mouse_position) orelse return;
                     }
                 }
             },
@@ -233,8 +243,16 @@ pub const State = struct {
                     return;
                 };
 
+                if (self.p1.score >= 6) {
+                    std.debug.print("Player 1 wins!", .{});
+                    self.quit = true;
+                } else if (self.p2.score >= 6) {
+                    std.debug.print("Player 2 wins!", .{});
+                    self.quit = true;
+                }
+
                 // If we have completed the move then we switch players
-                self.turn_state = self.turn_state.next() orelse return;
+                self.turn_state = self.turn_state.next(self.mouse_position) orelse return;
             },
         }
     }
@@ -316,14 +334,20 @@ pub const State = struct {
                 for (mv.chain[0..2]) |pt| std.debug.assert(pt != r1);
 
                 if (marbles.contains(r1)) return error.CannotPushSelf;
-                if (enemy_marbles.find(r1)) |idx| {
+                if (enemy_marbles.find(r1)) |enemy_idx| {
                     // We cant push [enemy friend]
                     if (marbles.contains(r2)) return error.CannotPushSelf;
                     // We cant push [enemy enemy]
                     if (enemy_marbles.contains(r2)) return error.CannotPushEnemy;
 
                     // Move the old marble to the r2 position
-                    enemy_marbles.items[idx] = r2;
+                    if (r2.out_of_bounds()) {
+                        enemy_marbles.swap_remove(enemy_idx);
+                        friend.score += 1;
+                    } else {
+                        enemy_marbles.items[enemy_idx] = r2;
+                    }
+
                     // Move the tail to r1
                     const tail_idx = marbles.find(mv.chain[1]) orelse return error.ChainNotOwned;
                     marbles.items[tail_idx] = r1;
@@ -352,7 +376,12 @@ pub const State = struct {
                         if (marbles.contains(r3)) return error.CannotPushSelf;
 
                         // move enemy to r3
-                        enemy_marbles.items[enemy_idx] = r3;
+                        if (r3.out_of_bounds()) {
+                            enemy_marbles.swap_remove(enemy_idx);
+                            friend.score += 1;
+                        } else {
+                            enemy_marbles.items[enemy_idx] = r3;
+                        }
 
                         // move friend to r1
                         const friend_idx = marbles.find(mv.chain[2]) orelse unreachable;
