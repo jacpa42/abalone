@@ -30,7 +30,7 @@ pub fn build(b: *std.Build) void {
     {
         const shader_dir = "src/shaders/";
 
-        var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         const shaders = find_shaders(&arena, shader_dir) catch @panic("Failed to find all shaders");
         defer arena.deinit();
 
