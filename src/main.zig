@@ -1,7 +1,6 @@
 const sokol = @import("sokol");
 const std = @import("std");
 const axial = @import("axial.zig");
-
 const state = @import("state.zig");
 
 pub fn main() error{ SdlError, StateInitError }!void {

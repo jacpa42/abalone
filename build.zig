@@ -27,31 +27,45 @@ pub fn build(b: *std.Build) void {
     // Shader compilation
     // extract shdc dependency from sokol dependency
     const dep_shdc = dep_sokol.builder.dependency("shdc", .{});
-    {
-        const shader_dir = "src/shaders/";
+    const shader_dir = "src/shaders/";
 
-        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        const shaders = find_shaders(&arena, shader_dir) catch @panic("Failed to find all shaders");
-        defer arena.deinit();
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    const shaders = find_shaders(&arena, shader_dir) catch @panic("Failed to find all shaders");
+    defer arena.deinit();
 
-        for (shaders.items) |shader_path_with_zig_ext| {
-            const len = shader_path_with_zig_ext.len;
+    for (shaders.items) |shader_path_with_zig_ext| {
+        const len = shader_path_with_zig_ext.len;
 
-            const shdc_step = sokol.shdc.createSourceFile(b, .{
-                .shdc_dep = dep_shdc,
-                .input = shader_path_with_zig_ext[0 .. len - 4],
-                .output = shader_path_with_zig_ext,
-                .slang = .{
-                    .hlsl5 = true,
-                    .wgsl = true,
-                    .metal_macos = true,
-                },
-                .reflection = true,
-            }) catch @panic("");
+        const input = shader_path_with_zig_ext[0 .. len - ".zig".len];
+        const output = shader_path_with_zig_ext;
+        std.debug.print("Compiling shader {s} -> {s}\n", .{ input, output });
 
-            exe.step.dependOn(shdc_step);
-        }
+        const shdc_step = sokol.shdc.createSourceFile(b, .{
+            .shdc_dep = dep_shdc,
+            .input = input,
+            .output = output,
+            .slang = .{
+                .glsl410 = false,
+                .glsl430 = true,
+
+                .glsl300es = true,
+                .glsl310es = true,
+
+                .hlsl4 = false,
+                .hlsl5 = true,
+
+                .metal_macos = true,
+                .metal_ios = true,
+                .metal_sim = true,
+                .wgsl = true,
+            },
+            .reflection = true,
+        }) catch @panic("");
+
+        exe.step.dependOn(shdc_step);
     }
+
+    std.debug.print("Shaders compiled\n", .{});
 
     // qoi
     const qoi = b.dependency("qoi", .{ .target = target, .optimize = optimize });
@@ -123,11 +137,8 @@ fn find_shaders_in_dir(
             .file => {
                 const ext = ".zig";
                 if (std.mem.endsWith(u8, entry.name, ext)) continue;
-
-                var file_name = try arena.allocator().alloc(u8, dir_path.len + entry.name.len + 4);
-                @memcpy(file_name[0..dir_path.len], dir_path);
-                @memcpy(file_name[dir_path.len .. dir_path.len + entry.name.len], entry.name);
-                @memcpy(file_name[dir_path.len + entry.name.len ..], ".zig");
+                const slices = [_][]const u8{ dir_path, entry.name, ".zig" };
+                const file_name = try std.mem.concat(arena.allocator(), u8, &slices);
                 try paths.appendBounded(file_name);
             },
             .directory => try find_shaders_in_dir(entry.name, arena, paths),

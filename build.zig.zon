@@ -7,8 +7,8 @@
             .hash = "sokol-0.1.0-pb1HK_ZPLgC-2uMA63u1iiB2BqPcibWOEZVH0Hz1ursz",
         },
         .qoi = .{
-            .url = "git+https://github.com/jacpa42/qoi.git#104295495280ebf3509382e16398c6d8a247d279",
-            .hash = "qoi-0.0.0-zbe9oCE6AABwzK5aB-sSsn3MWa6xnUi6ulBpPQHaq5Oy",
+            .url = "git+https://github.com/jacpa42/qoi.git#6ea01421aafe3d008e73c035617a4be4d4f34e8d",
+            .hash = "qoi-0.0.0-zbe9oLc6AAAd2Hk4QqtMDvxum5SMyILrMkTVjQdFnowv",
         },
     },
     .paths = .{""},
