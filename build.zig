@@ -25,7 +25,7 @@ pub fn build(b: *Build) void {
         .root_module = abalone_mod,
     });
 
-    try compile_shaders(b, dep_sokol, exe);
+    compile_shaders(b, dep_sokol, exe) catch @panic("");
 
     exe.root_module.addImport("sokol", dep_sokol.module("sokol"));
 
@@ -74,21 +74,16 @@ fn compile_shaders(b: *Build, dep_sokol: *Build.Dependency, abalone: *Build.Step
     const dep_shdc = dep_sokol.builder.dependency("shdc", .{});
     const shader_dir = "src/shaders/";
 
-    var arena = std.heap.ArenaAllocator.init(b.allocator);
-    const shaders = find_shaders(&arena, shader_dir) catch @panic("Failed to find all shaders");
-    defer arena.deinit();
+    var shaders = try std.ArrayList(shader_desc).initCapacity(b.allocator, 0xf);
+    try find_shaders(b.allocator, shader_dir, &shaders);
 
-    for (shaders.items) |shader_path_with_zig_ext| {
-        const len = shader_path_with_zig_ext.len;
-
-        const input = shader_path_with_zig_ext[0 .. len - ".zig".len];
-        const output = shader_path_with_zig_ext;
-        std.debug.print("Compiling shader {s} -> {s}\n", .{ input, output });
+    for (shaders.items) |shader| {
+        std.debug.print("Compiling shader {s} -> {s}\n", .{ shader.input, shader.output });
 
         const shdc_step = sokol.shdc.createSourceFile(b, .{
             .shdc_dep = dep_shdc,
-            .input = input,
-            .output = output,
+            .input = shader.input,
+            .output = shader.output,
             .slang = .{
                 .glsl410 = false,
                 .glsl430 = true,
@@ -113,28 +108,17 @@ fn compile_shaders(b: *Build, dep_sokol: *Build.Dependency, abalone: *Build.Step
     std.debug.print("Shaders compiled\n", .{});
 }
 
+const shader_desc = struct { input: []const u8, output: []const u8 };
+
 /// All the path strings and slices are allocated with the arena. Freeing the arena memory will clean up this bad boy.
 ///
 /// All paths in the returned ArrayList contain the `.zig` extension. The actual path is just this sub 4.
 fn find_shaders(
-    arena: *std.heap.ArenaAllocator,
+    alloc: std.mem.Allocator,
     shader_dir: []const u8,
-) (error{OutOfMemory} || std.fs.Dir.OpenError)!std.ArrayList([]const u8) {
-    const MAX_SHADERS = 100;
-
-    const path_buffer = try arena.allocator().alloc([]const u8, MAX_SHADERS);
-    var paths = std.ArrayList([]const u8).initBuffer(path_buffer);
-
-    try find_shaders_in_dir(shader_dir, arena, &paths);
-    return paths;
-}
-
-fn find_shaders_in_dir(
-    dir_path: []const u8,
-    arena: *std.heap.ArenaAllocator,
-    paths: *std.ArrayList([]const u8),
+    shaders: *std.ArrayList(shader_desc),
 ) (error{OutOfMemory} || std.fs.Dir.OpenError)!void {
-    var dir = try std.fs.cwd().openDir(dir_path, .{ .iterate = true });
+    var dir = try std.fs.cwd().openDir(shader_dir, .{ .iterate = true });
     defer dir.close();
 
     var iter = dir.iterate();
@@ -144,11 +128,16 @@ fn find_shaders_in_dir(
             .file => {
                 const ext = ".zig";
                 if (std.mem.endsWith(u8, entry.name, ext)) continue;
-                const slices = [_][]const u8{ dir_path, entry.name, ".zig" };
-                const file_name = try std.mem.concat(arena.allocator(), u8, &slices);
-                try paths.appendBounded(file_name);
+
+                const input_name = [_][]const u8{ shader_dir, entry.name };
+                const input = try std.mem.concat(alloc, u8, &input_name);
+
+                const output_name = [_][]const u8{ shader_dir, entry.name, ".zig" };
+                const output = try std.mem.concat(alloc, u8, &output_name);
+
+                try shaders.append(alloc, .{ .input = input, .output = output });
             },
-            .directory => try find_shaders_in_dir(entry.name, arena, paths),
+            .directory => try find_shaders(alloc, entry.name, shaders),
             else => continue,
         }
     }
