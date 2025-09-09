@@ -1,4 +1,4 @@
-const sdl3 = @import("sdl3");
+const sokol = @import("sokol");
 
 pub const rgba = struct {
     r: u8,
@@ -14,7 +14,7 @@ pub const rgba = struct {
         return .{ .r = r, .g = g, .b = b, .a = a };
     }
 
-    pub inline fn sdl(self: @This()) sdl3.pixels.FColor {
+    pub inline fn sdl(self: @This()) sokol.pixels.FColor {
         const m: f32 = comptime 1.0 / 255.0;
         return .{
             .r = @as(f32, @floatFromInt(self.r)) * m,

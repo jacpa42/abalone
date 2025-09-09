@@ -1,10 +1,9 @@
 const std = @import("std");
+const sokol = @import("sokol");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{
-        .preferred_optimize_mode = .ReleaseSmall,
-    });
+    const optimize = b.standardOptimizeOption(.{});
 
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -18,36 +17,45 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
 
-    const sdl3 = b.dependency("sdl3", .{
+    // sokol
+    const dep_sokol = b.dependency("sokol", .{
         .target = target,
         .optimize = optimize,
-
-        // Options passed directly to https://github.com/castholm/SDL (SDL3 C Bindings):
-        .c_sdl_preferred_linkage = std.builtin.LinkMode.dynamic,
-        .c_sdl_strip = true,
-        .c_sdl_sanitize_c = std.zig.SanitizeC.off,
-        .c_sdl_lto = if (@import("builtin").target.os.tag == .macos) .none else .full,
-        // .c_sdl_emscripten_pthreads = false,
-        // .c_sdl_install_build_config_h = false,
-
-        .ext_image = false,
-        // Options if `ext_image` is enabled:
-        // .image_enable_bmp = true,
-        // .image_enable_gif = true,
-        // .image_enable_jpg = true,
-        // .image_enable_lbm = true,
-        // .image_enable_pcx = true,
-        // .image_enable_pnm = true,
-        // .image_enable_qoi = true,
-        // .image_enable_svg = true,
-        // .image_enable_tga = true,
-        // .image_enable_xcf = true,
-        // .image_enable_xpm = true,
-        // .image_enable_xv = true,
-        // .image_enable_png = true,
     });
+    exe.root_module.addImport("sokol", dep_sokol.module("sokol"));
 
-    exe.root_module.addImport("sdl3", sdl3.module("sdl3"));
+    // Shader compilation
+    // extract shdc dependency from sokol dependency
+    const dep_shdc = dep_sokol.builder.dependency("shdc", .{});
+    {
+        const shader_dir = "src/shaders/";
+
+        var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+        const shaders = find_shaders(&arena, shader_dir) catch @panic("Failed to find all shaders");
+        defer arena.deinit();
+
+        for (shaders.items) |shader_path_with_zig_ext| {
+            const len = shader_path_with_zig_ext.len;
+
+            const shdc_step = sokol.shdc.createSourceFile(b, .{
+                .shdc_dep = dep_shdc,
+                .input = shader_path_with_zig_ext[0 .. len - 4],
+                .output = shader_path_with_zig_ext,
+                .slang = .{
+                    .hlsl5 = true,
+                    .wgsl = true,
+                    .metal_macos = true,
+                },
+                .reflection = true,
+            }) catch @panic("");
+
+            exe.step.dependOn(shdc_step);
+        }
+    }
+
+    // qoi
+    const qoi = b.dependency("qoi", .{ .target = target, .optimize = optimize });
+    exe.root_module.addImport("qoi", qoi.module("qoi"));
 
     // Installs the binary with the `install` option
     b.installArtifact(exe);
@@ -73,11 +81,6 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the game :)");
     run_step.dependOn(&run_cmd.step);
 
-    // Only pass macOS-specific linker flags if target is Darwin
-    if (target.result.os.tag == .macos) {
-        exe.dead_strip_dylibs = true;
-    }
-
     const exe_unit_tests = b.addTest(.{ .root_module = exe_mod });
 
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
@@ -87,4 +90,48 @@ pub fn build(b: *std.Build) void {
     // running the unit tests.
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_exe_unit_tests.step);
+}
+
+/// All the path strings and slices are allocated with the arena. Freeing the arena memory will clean up this bad boy.
+///
+/// All paths in the returned ArrayList contain the `.zig` extension. The actual path is just this sub 4.
+fn find_shaders(
+    arena: *std.heap.ArenaAllocator,
+    shader_dir: []const u8,
+) (error{OutOfMemory} || std.fs.Dir.OpenError)!std.ArrayList([]const u8) {
+    const MAX_SHADERS = 100;
+
+    const path_buffer = try arena.allocator().alloc([]const u8, MAX_SHADERS);
+    var paths = std.ArrayList([]const u8).initBuffer(path_buffer);
+
+    try find_shaders_in_dir(shader_dir, arena, &paths);
+    return paths;
+}
+
+fn find_shaders_in_dir(
+    dir_path: []const u8,
+    arena: *std.heap.ArenaAllocator,
+    paths: *std.ArrayList([]const u8),
+) (error{OutOfMemory} || std.fs.Dir.OpenError)!void {
+    var dir = try std.fs.cwd().openDir(dir_path, .{ .iterate = true });
+    defer dir.close();
+
+    var iter = dir.iterate();
+
+    while (try iter.next()) |entry| {
+        switch (entry.kind) {
+            .file => {
+                const ext = ".zig";
+                if (std.mem.endsWith(u8, entry.name, ext)) continue;
+
+                var file_name = try arena.allocator().alloc(u8, dir_path.len + entry.name.len + 4);
+                @memcpy(file_name[0..dir_path.len], dir_path);
+                @memcpy(file_name[dir_path.len .. dir_path.len + entry.name.len], entry.name);
+                @memcpy(file_name[dir_path.len + entry.name.len ..], ".zig");
+                try paths.appendBounded(file_name);
+            },
+            .directory => try find_shaders_in_dir(entry.name, arena, paths),
+            else => continue,
+        }
+    }
 }

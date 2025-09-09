@@ -1,10 +1,10 @@
 const std = @import("std");
-const sdl3 = @import("sdl3");
+const sokol = @import("sokol");
 pub const color = @import("color.zig");
 
-const Renderer = sdl3.render.Renderer;
-const Point = sdl3.rect.FPoint;
-const Vertex = sdl3.render.Vertex;
+const Renderer = sokol.render.Renderer;
+const Point = sokol.rect.FPoint;
+const Vertex = sokol.render.Vertex;
 const rgba = color.rgba;
 
 const size = @import("../axial.zig").AxialVector.radius;
