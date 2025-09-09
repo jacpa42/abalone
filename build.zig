@@ -5,7 +5,14 @@ const Build = std.Build;
 pub fn build(b: *Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    // dependancies
     const dep_sokol = b.dependency("sokol", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const dep_qoi = b.dependency("qoi", .{
         .target = target,
         .optimize = optimize,
     });
@@ -16,6 +23,7 @@ pub fn build(b: *Build) void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "sokol", .module = dep_sokol.module("sokol") },
+            .{ .name = "qoi", .module = dep_qoi.module("qoi") },
         },
     });
 
@@ -28,10 +36,6 @@ pub fn build(b: *Build) void {
     compile_shaders(b, dep_sokol, exe) catch @panic("");
 
     exe.root_module.addImport("sokol", dep_sokol.module("sokol"));
-
-    // qoi
-    const qoi = b.dependency("qoi", .{ .target = target, .optimize = optimize });
-    exe.root_module.addImport("qoi", qoi.module("qoi"));
 
     // Installs the binary with the `install` option
     b.installArtifact(exe);
