@@ -229,13 +229,14 @@ pub export fn init() void {
     var sdtx_desc: sdtx.Desc = .{
         .logger = .{ .func = slog.func },
     };
-    sdtx_desc.fonts[0] = sdtx.fontOric();
+
+    sdtx_desc.fonts[0] = sdtx.fontKc853();
     sdtx.setup(sdtx_desc);
 
     // pass-action for clearing to black
     state.pass_action.colors[0] = .{
         .load_action = .CLEAR,
-        .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
+        .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 0 },
     };
 
     // shader- and pipeline-object
