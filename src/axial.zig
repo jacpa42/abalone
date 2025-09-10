@@ -18,11 +18,35 @@ pub const AxialVector = packed struct {
     /// The `radius` parameter is the radius of the maximal circle inscribed in the hexagon.
     ///
     /// [https://www.redblobgames.com/grids/hexagons/#pixel-to-hex]
-    pub inline fn to_pixel_vec(self: @This()) struct { f32, f32 } {
+    pub inline fn to_pixel_vec(self: @This()) [2]f32 {
         const q = @as(f32, @floatFromInt(self.q));
         const r = @as(f32, @floatFromInt(self.r));
 
         return .{ radius * root3 * (q + r * 0.5), radius * 1.5 * r };
+    }
+
+    /// https://en.wikipedia.org/wiki/Centered_hexagonal_number#Formula
+    fn num_hexagons() usize {
+        return 3 * bound * (bound + 1) + 1;
+    }
+
+    pub fn compute_hexagons() [num_hexagons()][2]f32 {
+        // https://en.wikipedia.org/wiki/Centered_hexagonal_number#Formula
+        var hexagons: [num_hexagons()][2]f32 = undefined;
+        var idx = 0;
+
+        var q: i16 = -bound;
+        while (q <= bound) : (q += 1) {
+            // |s| (= |q+r|) < bound
+            var r: i16 = @max(-q - bound, -bound);
+            const end = @min(-q + bound, bound);
+            while (r <= end) : (r += 1) {
+                hexagons[idx] = (AxialVector{ .q = q, .r = r }).to_pixel_vec();
+                idx += 1;
+            }
+        }
+
+        return hexagons;
     }
 
     /// Converts the NDC vector to an axial vector

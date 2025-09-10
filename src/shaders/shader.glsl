@@ -1,9 +1,5 @@
-//------------------------------------------------------------------------------
-//  Shader code for texcube-sapp sample.
-//
 //  NOTE: This source file also uses the '#pragma sokol' form of the
 //  custom tags.
-//------------------------------------------------------------------------------
 #pragma sokol @header const m = @import("../math.zig")
 #pragma sokol @ctype mat4 m.Mat4
 
@@ -13,6 +9,7 @@ layout(binding=0) uniform vs_params {
 };
 
 in vec2 pos;
+in vec2 inst_pos;
 in vec4 color0;
 in vec2 texcoord0;
 
@@ -20,7 +17,7 @@ out vec4 color;
 out vec2 tex_coord;
 
 void main() {
-    gl_Position = mvp * vec4(pos, 0.0, 1.0);
+    gl_Position = mvp * vec4(pos + inst_pos, 0.0, 1.0);
     color = color0;
     tex_coord = texcoord0;
 }
