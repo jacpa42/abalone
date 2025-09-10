@@ -192,7 +192,6 @@ export fn init() void {
             l.attrs[shd.ATTR_default_pos] = .{ .format = .FLOAT2, .buffer_index = 0 };
             l.attrs[shd.ATTR_default_color0] = .{ .format = .UBYTE4N, .buffer_index = 0 };
             l.attrs[shd.ATTR_default_texcoord0] = .{ .format = .FLOAT2, .buffer_index = 0 };
-
             l.attrs[shd.ATTR_default_inst_pos] = .{ .format = .FLOAT2, .buffer_index = 1 };
             break :init l;
         },
@@ -214,7 +213,10 @@ export fn init() void {
 }
 
 export fn frame() void {
-    sg.beginPass(.{ .action = state.pass_action, .swapchain = sglue.swapchain() });
+    sg.beginPass(.{
+        .action = state.pass_action,
+        .swapchain = sglue.swapchain(),
+    });
     sg.applyPipeline(state.pip);
     var uniforms = shd.VsParams{ .mvp = .identity() };
     sg.applyUniforms(shd.UB_vs_params, sg.asRange(&uniforms));

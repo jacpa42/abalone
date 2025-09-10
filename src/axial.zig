@@ -46,6 +46,15 @@ pub const AxialVector = packed struct {
             }
         }
 
+        const zero_idx = fdzero: {
+            for (hexagons, 0..) |hex, i| {
+                if (hex[0] == 0.0 and hex[1] == 0.0) break :fdzero i;
+            }
+            unreachable;
+        };
+
+        std.mem.swap([2]f32, &hexagons[0], &hexagons[zero_idx]);
+
         return hexagons;
     }
 
