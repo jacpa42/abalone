@@ -1,47 +1,136 @@
 const sokol = @import("sokol");
 const std = @import("std");
 const sshape = sokol.shape;
+const f32x4 = @Vector(4, f32);
 
+inline fn sum(v: f32x4) f32 {
+    return v[0] + v[1] + v[2] + v[3];
+}
+
+/// Column-wise 4x4 matrix
 pub const Mat4 = extern struct {
-    m: [4][4]f32,
+    m: [4]f32x4,
 
-    pub fn identity() Mat4 {
-        return Mat4{
-            .m = [_][4]f32{
-                .{ 1.0, 0.0, 0.0, 0.0 },
-                .{ 0.0, 1.0, 0.0, 0.0 },
-                .{ 0.0, 0.0, 1.0, 0.0 },
-                .{ 0.0, 0.0, 0.0, 1.0 },
-            },
-        };
+    pub const identity = @This(){ .m = [_]f32x4{
+        .{ 1.0, 0.0, 0.0, 0.0 },
+        .{ 0.0, 1.0, 0.0, 0.0 },
+        .{ 0.0, 0.0, 1.0, 0.0 },
+        .{ 0.0, 0.0, 0.0, 1.0 },
+    } };
+
+    pub const zero = @This(){ .m = [_]f32x4{
+        .{ 0.0, 0.0, 0.0, 0.0 },
+        .{ 0.0, 0.0, 0.0, 0.0 },
+        .{ 0.0, 0.0, 0.0, 0.0 },
+        .{ 0.0, 0.0, 0.0, 0.0 },
+    } };
+
+    /// https://en.wikipedia.org/wiki/Invertible_matrix#Inversion_of_4_%C3%97_4_matrices
+    pub fn inverse(self: *const @This()) Mat4 {
+        const a2 = self.mul(self);
+        const a3 = a2.mul(self);
+
+        const a1tr = self.trace();
+        const a1tr2 = a1tr * a1tr;
+        const a2tr = a2.trace();
+        const a3tr = a3.trace();
+        const a4tr = sum(
+            a2.row(0) * a2.col(0) +
+                a2.row(1) * a2.col(1) +
+                a2.row(2) * a2.col(2) +
+                a2.row(3) * a2.col(3),
+        );
+
+        const one_over_det = 24 / ((a1tr2 * a1tr2) - 6 * a2tr * a1tr2 + 3 * a2tr * a2tr + 8 * a3tr * a1tr - 6 * a4tr);
+
+        return Mat4.diag((a1tr * (a1tr2 - 3 * a2tr) + 2 * a3tr) / 6)
+            .add(&self.scalar_mul(0.5 * (a2tr - a1tr2)))
+            .add(&a2.scalar_mul(a1tr))
+            .sub(&a3)
+            .scalar_mul(one_over_det);
     }
 
-    pub fn zero() Mat4 {
-        return Mat4{
-            .m = [_][4]f32{
-                .{ 0.0, 0.0, 0.0, 0.0 },
-                .{ 0.0, 0.0, 0.0, 0.0 },
-                .{ 0.0, 0.0, 0.0, 0.0 },
-                .{ 0.0, 0.0, 0.0, 0.0 },
-            },
-        };
+    pub inline fn row(self: *const @This(), v: u2) f32x4 {
+        return f32x4{ self.m[0][v], self.m[1][v], self.m[2][v], self.m[3][v] };
     }
 
-    pub fn mul(left: Mat4, right: Mat4) Mat4 {
-        var res = Mat4.zero();
-        for (0..4) |col| {
-            for (0..4) |row| {
-                res.m[col][row] = left.m[0][row] * right.m[col][0] +
-                    left.m[1][row] * right.m[col][1] +
-                    left.m[2][row] * right.m[col][2] +
-                    left.m[3][row] * right.m[col][3];
-            }
+    pub inline fn col(self: *const @This(), v: u2) f32x4 {
+        return self.m[v];
+    }
+
+    /// https://en.wikipedia.org/wiki/Determinant#Trace
+    pub fn det(self: *const @This()) f32 {
+        const a2 = self.mul(self);
+        const a3 = a2.mul(self);
+        const a4 = a3.mul(self);
+
+        const a2tr = a2.trace();
+        const tr = self.trace();
+        const tr2 = tr * tr;
+        const a3tr = a3.trace();
+        const a4tr = a4.trace();
+
+        return ((tr2 * tr2) - 6 * a2tr * tr2 + 3 * a2tr * a2tr + 8 * a3tr * tr - 6 * a4tr) / 24;
+    }
+
+    /// https://en.wikipedia.org/wiki/Determinant#Trace
+    pub fn diag(v: f32) Mat4 {
+        return Mat4{ .m = [_]f32x4{
+            .{ v, 0, 0, 0 },
+            .{ 0, v, 0, 0 },
+            .{ 0, 0, v, 0 },
+            .{ 0, 0, 0, v },
+        } };
+    }
+
+    pub fn trace(self: *const @This()) f32 {
+        return self.m[0][0] + self.m[1][1] + self.m[2][2] + self.m[3][3];
+    }
+
+    pub fn mul(self: *const @This(), right: *const Mat4) Mat4 {
+        var out: Mat4 = undefined;
+
+        // for each column of b
+        for (0..4) |i| {
+            const bx: f32x4 = @splat(self.m[i][0]);
+            const by: f32x4 = @splat(self.m[i][1]);
+            const bz: f32x4 = @splat(self.m[i][2]);
+            const bw: f32x4 = @splat(self.m[i][3]);
+
+            out.m[i] =
+                right.m[0] * bx +
+                right.m[1] * by +
+                right.m[2] * bz +
+                right.m[3] * bw;
         }
-        return res;
+
+        return out;
+    }
+
+    pub fn scalar_mul(self: *const @This(), v: f32) Mat4 {
+        var out: Mat4 = self.*;
+        inline for (&out.m) |*c| c.* *= @splat(v);
+        return out;
+    }
+
+    pub fn sub(self: *const @This(), other: *const @This()) Mat4 {
+        var out: Mat4 = self.*;
+        inline for (&out.m, other.m) |*c, other_col| {
+            c.* -= other_col;
+        }
+        return out;
+    }
+
+    pub fn add(self: *const @This(), other: *const @This()) Mat4 {
+        var out: Mat4 = self.*;
+        inline for (&out.m, other.m) |*c, other_col| {
+            c.* += other_col;
+        }
+        return out;
     }
 
     pub fn persp(fov: f32, aspect: f32, near: f32, far: f32) Mat4 {
-        var res = Mat4.identity();
+        var res = Mat4.identity;
         const t = std.math.tan(fov * (std.math.pi / 360.0));
         res.m[0][0] = 1.0 / t;
         res.m[1][1] = aspect / t;
@@ -53,7 +142,7 @@ pub const Mat4 = extern struct {
     }
 
     pub fn lookat(eye: Vec3, center: Vec3, up: Vec3) Mat4 {
-        var res = Mat4.zero();
+        var res = Mat4.zero;
 
         const f = Vec3.norm(Vec3.sub(center, eye));
         const s = Vec3.norm(Vec3.cross(f, up));
@@ -80,7 +169,7 @@ pub const Mat4 = extern struct {
     }
 
     pub fn rotate(angle: f32, axis_unorm: Vec3) Mat4 {
-        var res = Mat4.identity();
+        var res = Mat4.identity;
 
         const axis = Vec3.norm(axis_unorm);
         const sin_theta = std.math.sin(std.math.degreesToRadians(angle));
@@ -101,7 +190,7 @@ pub const Mat4 = extern struct {
     }
 
     pub fn translate(translation: Vec3) Mat4 {
-        var res = Mat4.identity();
+        var res = Mat4.identity;
         res.m[3][0] = translation.x;
         res.m[3][1] = translation.y;
         res.m[3][2] = translation.z;

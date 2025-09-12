@@ -208,12 +208,7 @@ pub const GameState = struct {
     pub fn process_mousebutton_down(self: *@This(), mouse_x: f32, mouse_y: f32) void {
         switch (self.turn_state) {
             .ChoosingChain => |*mv| {
-                const moused_over = AxialVector.from_pixel_vec_screen_space(
-                    mouse_x,
-                    mouse_y,
-                    self.screen_width,
-                    self.screen_height,
-                );
+                const moused_over = AxialVector.from_pixel_vec_screen_space(mouse_x, mouse_y, .identity);
 
                 self.redraw_requested = true;
 
@@ -254,12 +249,7 @@ pub const GameState = struct {
 
     pub fn process_mouse_moved(self: *@This(), mouse_x: f32, mouse_y: f32) void {
         const new_pos =
-            AxialVector.from_pixel_vec_screen_space(
-                mouse_x,
-                mouse_y,
-                self.screen_width,
-                self.screen_height,
-            ).if_in_bounds();
+            AxialVector.from_pixel_vec_screen_space(mouse_x, mouse_y, .identity).if_in_bounds();
         if (new_pos == self.mouse_position) return;
 
         self.mouse_position = new_pos;

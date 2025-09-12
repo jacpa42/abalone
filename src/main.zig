@@ -2,6 +2,7 @@ const sokol = @import("sokol");
 const qoi = @import("qoi");
 const slog = sokol.log;
 const sg = sokol.gfx;
+const math = @import("math.zig");
 const sapp = sokol.app;
 const sglue = sokol.glue;
 const shd = @import("shaders/shader.glsl.zig");
@@ -11,14 +12,17 @@ const axial = @import("axial.zig");
 const GameState = @import("state.zig").GameState;
 const AxialVector = axial.AxialVector;
 
+const inital_window_width = 680;
+const inital_window_height = 480;
+
 pub fn main() error{ SdlError, StateInitError }!void {
     sokol.app.run(.{
         .init_cb = init,
         .frame_cb = frame,
         .cleanup_cb = cleanup,
         .event_cb = input,
-        .width = 640,
-        .height = 480,
+        .width = inital_window_width,
+        .height = inital_window_height,
         .alpha = true,
         .icon = .{ .sokol_default = true },
         .window_title = "triangle.zig",
@@ -34,6 +38,20 @@ const state = struct {
     var default_color_tex: sg.View = .{};
     var active_color_tex: sg.View = .{};
     var textures: [4]sg.View = .{sg.View{}} ** 4;
+
+    var fov: f32 = 90.0;
+
+    const view_matrix: math.Mat4 = math.Mat4.lookat(
+        .{ .x = 0, .y = 0, .z = -1 }, // eye
+        .{ .x = 0, .y = 0, .z = 0 }, // center
+        .{ .x = 0, .y = -1, .z = 0 }, // up
+    );
+    var perspective_matrix: math.Mat4 = math.Mat4.persp(
+        90.0,
+        @as(f32, @floatFromInt(inital_window_width)) / @as(f32, @floatFromInt(inital_window_height)),
+        0.1,
+        10.0,
+    );
 };
 
 const Vertex = extern struct {
@@ -217,8 +235,11 @@ export fn frame() void {
         .action = state.pass_action,
         .swapchain = sglue.swapchain(),
     });
+
     sg.applyPipeline(state.pip);
-    var uniforms = shd.VsParams{ .mvp = .identity() };
+
+    // Set view_port matrix
+    var uniforms = shd.VsParams{ .mvp = state.perspective_matrix.mul(&state.view_matrix) };
     sg.applyUniforms(shd.UB_vs_params, sg.asRange(&uniforms));
 
     // Set texture
@@ -231,13 +252,21 @@ export fn frame() void {
     state.bind.views[shd.VIEW_tex] = state.default_color_tex;
     sg.applyBindings(state.bind);
 
-    // hexagon with texture
+    // Hexagon with texture
     sg.draw(square_indices.len, hexagon_indices.len, hexagon_instances.len);
 
-    state.bind.views[shd.VIEW_tex] = state.active_color_tex;
-    sg.applyBindings(state.bind);
+    if (state.game_state.mouse_position) |mp| {
+        const mp_screen = mp.to_pixel_vec();
+        const translate = math.Mat4.translate(.{ .x = mp_screen[0], .y = -mp_screen[1], .z = 0 });
 
-    sg.draw(square_indices.len, hexagon_indices.len, 1);
+        uniforms.mvp = state.perspective_matrix.mul(&translate).mul(&state.view_matrix);
+
+        state.bind.views[shd.VIEW_tex] = state.active_color_tex;
+        sg.applyBindings(state.bind);
+        sg.applyUniforms(shd.UB_vs_params, sg.asRange(&uniforms));
+
+        sg.draw(square_indices.len, hexagon_indices.len, 1);
+    }
 
     sg.endPass();
     sg.commit();
@@ -261,6 +290,9 @@ export fn input(event: ?*const sokol.app.Event) void {
         .RESIZED => {
             state.game_state.screen_height = @floatFromInt(ev.window_height);
             state.game_state.screen_width = @floatFromInt(ev.window_width);
+
+            const aspect = state.game_state.screen_width / state.game_state.screen_height;
+            state.perspective_matrix = math.Mat4.persp(state.fov, aspect, 0.01, 10.0);
         },
         else => return,
     }

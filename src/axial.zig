@@ -1,5 +1,7 @@
 const std = @import("std");
 const root3 = @sqrt(3.0);
+const Mat4 = @import("math.zig").Mat4;
+const Vec3 = @import("math.zig").Vec3;
 
 pub const Alignment = enum { pos, neg };
 
@@ -78,11 +80,10 @@ pub const AxialVector = packed struct {
     /// The `radius` parameter is the radius of the maximal circle inscribed in the hexagon.
     ///
     /// [https://www.redblobgames.com/grids/hexagons/#pixel-to-hex]
-    pub inline fn from_pixel_vec_screen_space(x: f32, y: f32, screen_width: f32, screen_height: f32) @This() {
-        return @This().from_pixel_vec(
-            2.0 * (x / screen_width) - 1,
-            2.0 * (y / screen_height) - 1,
-        );
+    pub inline fn from_pixel_vec_screen_space(x: f32, y: f32, model_view_inverse: Mat4) @This() {
+        const mx = model_view_inverse.m[0][0] * x + model_view_inverse.m[0][1] * y;
+        const my = model_view_inverse.m[1][0] * x + model_view_inverse.m[1][1] * y;
+        return @This().from_pixel_vec(mx, my);
     }
 
     /// Returns all neighbours who are in bounds
