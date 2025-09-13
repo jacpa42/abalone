@@ -323,9 +323,7 @@ export fn frame() void {
                     // Simulate the move with a copy of the game state
                     var copy_of_game_state = state.game_state;
                     const player_move = Move.new(data.balls.marbles.const_slice(), mv_dir);
-                    copy_of_game_state.do_move(data.turn, player_move) catch |e| {
-                        std.log.warn("Failed to simulate move: {}", .{e});
-                    };
+                    copy_of_game_state.do_move(data.turn, player_move) catch {};
 
                     draw_balls(&copy_of_game_state);
                 } else {

@@ -24,7 +24,6 @@ pub const SelectedBalls = struct {
 
             // If they are both 1 then the selected must be in the middle of them!
             if (vec_ai.size() == vec_bi.size()) {
-                std.log.info("Cannot deselect center of triplet!!", .{});
                 return false;
             }
         }
