@@ -13,6 +13,8 @@ pub const AxialVector = packed struct {
 
     /// Max value (in absolute terms) for each q, r ,s coordinate
     pub const bound = 4;
+
+    /// The radius of a hexagon. 2 * bound + 1 hexagons across -1 to 1, so (2/(2*bound+1))/2 is the radius
     pub const radius = 1.0 / (2.0 * bound + 1);
 
     /// Converts the axial coordinate to pixel coordinates in pointy configuration.
@@ -24,7 +26,7 @@ pub const AxialVector = packed struct {
         const q = @as(f32, @floatFromInt(self.q));
         const r = @as(f32, @floatFromInt(self.r));
 
-        return .{ radius * root3 * (q + r * 0.5), radius * 1.5 * r };
+        return .{ radius * root3 * (q + r * 0.5), -radius * 1.5 * r };
     }
 
     /// https://en.wikipedia.org/wiki/Centered_hexagonal_number#Formula
@@ -66,24 +68,15 @@ pub const AxialVector = packed struct {
     ///
     /// [https://www.redblobgames.com/grids/hexagons/#pixel-to-hex]
     pub fn from_pixel_vec(x: f32, y: f32) @This() {
-        const q = (root3 * x - y) / (radius * 3.0);
-        const r = (2.0 * y) / (radius * 3.0);
+        const r3 = 1.0 / (3.0 * radius);
+
+        const q = (root3 * x - y) * r3;
+        const r = (y + y) * r3;
 
         return .{
             .q = @intFromFloat(@round(q)),
             .r = @intFromFloat(@round(r)),
         };
-    }
-
-    /// Converts the screen space vector to an axial vector
-    ///
-    /// The `radius` parameter is the radius of the maximal circle inscribed in the hexagon.
-    ///
-    /// [https://www.redblobgames.com/grids/hexagons/#pixel-to-hex]
-    pub inline fn from_pixel_vec_screen_space(x: f32, y: f32, model_view_inverse: Mat4) @This() {
-        const mx = model_view_inverse.m[0][0] * x + model_view_inverse.m[0][1] * y;
-        const my = model_view_inverse.m[1][0] * x + model_view_inverse.m[1][1] * y;
-        return @This().from_pixel_vec(mx, my);
     }
 
     /// Returns all neighbours who are in bounds

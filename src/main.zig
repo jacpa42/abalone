@@ -10,6 +10,7 @@ const std = @import("std");
 const axial = @import("axial.zig");
 
 const GameState = @import("state.zig").GameState;
+const compute_best_fit_dir = @import("state.zig").compute_best_fit_dir;
 const AxialVector = axial.AxialVector;
 
 const inital_window_width = 680;
@@ -39,18 +40,9 @@ const state = struct {
     var active_color_tex: sg.View = .{};
     var textures: [4]sg.View = .{sg.View{}} ** 4;
 
-    var fov: f32 = 90.0;
-
-    const view_matrix: math.Mat4 = math.Mat4.lookat(
-        .{ .x = 0, .y = 0, .z = -1 }, // eye
-        .{ .x = 0, .y = 0, .z = 0 }, // center
-        .{ .x = 0, .y = -1, .z = 0 }, // up
-    );
-    var perspective_matrix: math.Mat4 = math.Mat4.persp(
-        90.0,
-        @as(f32, @floatFromInt(inital_window_width)) / @as(f32, @floatFromInt(inital_window_height)),
-        0.1,
-        10.0,
+    var model_view_projection_matrix: math.Mat4 = compute_mvp_matrix(
+        @as(f32, @floatFromInt(inital_window_width)) /
+            @as(f32, @floatFromInt(inital_window_height)),
     );
 };
 
@@ -149,6 +141,7 @@ export fn init() void {
     };
 
     // Square and hexagon verticies in one model
+    const hexscale = 0.95;
     const theta = std.math.pi / 3.0;
     const offset = std.math.pi / 6.0;
     state.bind.vertex_buffers[0] = sg.makeBuffer(.{
@@ -162,28 +155,28 @@ export fn init() void {
             // hexagon
             .{ .x = 0, .y = 0 },
             .{
-                .x = AxialVector.radius * 0.93 * @cos(0 * theta + offset),
-                .y = AxialVector.radius * 0.93 * @sin(0 * theta + offset),
+                .x = AxialVector.radius * hexscale * @cos(0 * theta + offset),
+                .y = AxialVector.radius * hexscale * @sin(0 * theta + offset),
             },
             .{
-                .x = AxialVector.radius * 0.93 * @cos(1 * theta + offset),
-                .y = AxialVector.radius * 0.93 * @sin(1 * theta + offset),
+                .x = AxialVector.radius * hexscale * @cos(1 * theta + offset),
+                .y = AxialVector.radius * hexscale * @sin(1 * theta + offset),
             },
             .{
-                .x = AxialVector.radius * 0.93 * @cos(2 * theta + offset),
-                .y = AxialVector.radius * 0.93 * @sin(2 * theta + offset),
+                .x = AxialVector.radius * hexscale * @cos(2 * theta + offset),
+                .y = AxialVector.radius * hexscale * @sin(2 * theta + offset),
             },
             .{
-                .x = AxialVector.radius * 0.93 * @cos(3 * theta + offset),
-                .y = AxialVector.radius * 0.93 * @sin(3 * theta + offset),
+                .x = AxialVector.radius * hexscale * @cos(3 * theta + offset),
+                .y = AxialVector.radius * hexscale * @sin(3 * theta + offset),
             },
             .{
-                .x = AxialVector.radius * 0.93 * @cos(4 * theta + offset),
-                .y = AxialVector.radius * 0.93 * @sin(4 * theta + offset),
+                .x = AxialVector.radius * hexscale * @cos(4 * theta + offset),
+                .y = AxialVector.radius * hexscale * @sin(4 * theta + offset),
             },
             .{
-                .x = AxialVector.radius * 0.93 * @cos(5 * theta + offset),
-                .y = AxialVector.radius * 0.93 * @sin(5 * theta + offset),
+                .x = AxialVector.radius * hexscale * @cos(5 * theta + offset),
+                .y = AxialVector.radius * hexscale * @sin(5 * theta + offset),
             },
         }),
     });
@@ -201,7 +194,7 @@ export fn init() void {
 
     state.bind.samplers[0] = sg.makeSampler(.{});
 
-    // create a shader and pipeline object
+    // Create a shader and pipeline object
     state.pip = sg.makePipeline(.{
         .shader = sg.makeShader(shd.defaultShaderDesc(sg.queryBackend())),
         .layout = init: {
@@ -239,7 +232,10 @@ export fn frame() void {
     sg.applyPipeline(state.pip);
 
     // Set view_port matrix
-    var uniforms = shd.VsParams{ .mvp = state.perspective_matrix.mul(&state.view_matrix) };
+    var uniforms = shd.VsParams{
+        .mvp = state.model_view_projection_matrix,
+        .offset = .{ 0, 0 },
+    };
     sg.applyUniforms(shd.UB_vs_params, sg.asRange(&uniforms));
 
     // Set texture
@@ -256,14 +252,11 @@ export fn frame() void {
     sg.draw(square_indices.len, hexagon_indices.len, hexagon_instances.len);
 
     if (state.game_state.mouse_position) |mp| {
-        const mp_screen = mp.to_pixel_vec();
-        const translate = math.Mat4.translate(.{ .x = mp_screen[0], .y = -mp_screen[1], .z = 0 });
-
-        uniforms.mvp = state.perspective_matrix.mul(&translate).mul(&state.view_matrix);
+        uniforms.offset = mp.to_pixel_vec();
+        sg.applyUniforms(shd.UB_vs_params, sg.asRange(&uniforms));
 
         state.bind.views[shd.VIEW_tex] = state.active_color_tex;
         sg.applyBindings(state.bind);
-        sg.applyUniforms(shd.UB_vs_params, sg.asRange(&uniforms));
 
         sg.draw(square_indices.len, hexagon_indices.len, 1);
     }
@@ -276,23 +269,41 @@ export fn input(event: ?*const sokol.app.Event) void {
     const ev = event orelse return;
     switch (ev.type) {
         .QUIT_REQUESTED => sapp.quit(),
+
         .KEY_DOWN => {
             const key = ev.key_code;
             state.game_state.process_keydown(key);
         },
+
         .MOUSE_DOWN => {
             if (ev.mouse_button != .LEFT) return;
-            state.game_state.process_mousebutton_down(ev.mouse_x, ev.mouse_y);
+
+            const adjusted_mouse_pos = state.model_view_projection_matrix.vecmul(
+                [_]f32{ ev.mouse_x, ev.mouse_y },
+            );
+
+            state.game_state.process_mousebutton_down(adjusted_mouse_pos[0], adjusted_mouse_pos[1]);
         },
+
         .MOUSE_MOVE => {
-            state.game_state.process_mouse_moved(ev.mouse_x, ev.mouse_y);
+            var mvp_inv: math.Mat4 = state.model_view_projection_matrix.inverse();
+
+            const ndc_x = 2.0 * (ev.mouse_x / state.game_state.screen_width) - 1.0;
+            const ndc_y = 2.0 * (ev.mouse_y / state.game_state.screen_height) - 1.0;
+
+            const adjusted_mouse_pos = mvp_inv.vecmul(
+                [_]f32{ ndc_x, ndc_y },
+            );
+
+            state.game_state.process_mouse_moved(adjusted_mouse_pos[0], adjusted_mouse_pos[1]);
         },
+
         .RESIZED => {
             state.game_state.screen_height = @floatFromInt(ev.window_height);
             state.game_state.screen_width = @floatFromInt(ev.window_width);
-
-            const aspect = state.game_state.screen_width / state.game_state.screen_height;
-            state.perspective_matrix = math.Mat4.persp(state.fov, aspect, 0.01, 10.0);
+            state.model_view_projection_matrix = compute_mvp_matrix(
+                state.game_state.screen_width / state.game_state.screen_height,
+            );
         },
         else => return,
     }
@@ -300,4 +311,12 @@ export fn input(event: ?*const sokol.app.Event) void {
 
 export fn cleanup() void {
     sg.shutdown();
+}
+
+fn compute_mvp_matrix(aspect_ratio: f32) math.Mat4 {
+    return math.Mat4.lookat(
+        .{ .x = 0, .y = 0, .z = -1 }, // eye
+        .{ .x = 0, .y = 0, .z = 0 }, // center
+        .{ .x = 0, .y = -1, .z = 0 }, // up
+    ).mul(&math.Mat4.persp(90, aspect_ratio, 0.1, 10));
 }

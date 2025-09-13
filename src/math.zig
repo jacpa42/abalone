@@ -25,9 +25,58 @@ pub const Mat4 = extern struct {
         .{ 0.0, 0.0, 0.0, 0.0 },
     } };
 
+    pub fn vecmul(self: *const @This(), vec: anytype) @TypeOf(vec) {
+        const V = @TypeOf(vec);
+        const info = @typeInfo(V);
+        if (info != .array) @compileError("Vector must be array type");
+        if (@typeInfo(info.array.child) != .float) @compileError("Vector must be array of floating point values.");
+        if (@typeInfo(info.array.child).float.bits != 32) @compileError("Vector must be array of f32 values.");
+
+        switch (info.array.len) {
+            0 => return vec,
+
+            1 => {
+                vec[0] *= self.m[0][0];
+                return vec;
+            },
+
+            2 => {
+                const v0 = @as(f32x4, @splat(vec[0])) * self.m[0];
+                const v1 = @as(f32x4, @splat(vec[1])) * self.m[1];
+
+                const out = v0 + v1;
+
+                return V{ out[0], out[1] };
+            },
+
+            3 => {
+                const v0 = @as(f32x4, @splat(vec[0])) * self.m[0];
+                const v1 = @as(f32x4, @splat(vec[1])) * self.m[1];
+                const v2 = @as(f32x4, @splat(vec[2])) * self.m[2];
+
+                const out = v0 + v1 + v2;
+
+                return V{ out[0], out[1], out[2] };
+            },
+
+            4 => {
+                const v0 = @as(f32x4, @splat(vec[0])) * self.m[0];
+                const v1 = @as(f32x4, @splat(vec[1])) * self.m[1];
+                const v2 = @as(f32x4, @splat(vec[2])) * self.m[2];
+                const v3 = @as(f32x4, @splat(vec[3])) * self.m[3];
+
+                const out = v0 + v1 + v2 + v3;
+
+                return @bitCast(out);
+            },
+
+            else => @compileError("Unsupported vector dimension"),
+        }
+    }
+
     /// https://en.wikipedia.org/wiki/Invertible_matrix#Inversion_of_4_%C3%97_4_matrices
     pub fn inverse(self: *const @This()) Mat4 {
-        const a2 = self.mul(self);
+        var a2 = self.mul(self);
         const a3 = a2.mul(self);
 
         const a1tr = self.trace();
@@ -43,11 +92,16 @@ pub const Mat4 = extern struct {
 
         const one_over_det = 24 / ((a1tr2 * a1tr2) - 6 * a2tr * a1tr2 + 3 * a2tr * a2tr + 8 * a3tr * a1tr - 6 * a4tr);
 
-        return Mat4.diag((a1tr * (a1tr2 - 3 * a2tr) + 2 * a3tr) / 6)
+        a2.scalar_mul_eq(a1tr);
+
+        var out = Mat4.diag((a1tr * (a1tr2 - 3 * a2tr) + 2 * a3tr) / 6)
             .add(&self.scalar_mul(0.5 * (a2tr - a1tr2)))
-            .add(&a2.scalar_mul(a1tr))
-            .sub(&a3)
-            .scalar_mul(one_over_det);
+            .add(&a2)
+            .sub(&a3);
+
+        out.scalar_mul_eq(one_over_det);
+
+        return out;
     }
 
     pub inline fn row(self: *const @This(), v: u2) f32x4 {
@@ -111,6 +165,10 @@ pub const Mat4 = extern struct {
         var out: Mat4 = self.*;
         inline for (&out.m) |*c| c.* *= @splat(v);
         return out;
+    }
+
+    pub fn scalar_mul_eq(self: *@This(), v: f32) void {
+        inline for (&self.m) |*c| c.* *= @splat(v);
     }
 
     pub fn sub(self: *const @This(), other: *const @This()) Mat4 {

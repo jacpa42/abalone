@@ -11,7 +11,7 @@ const Marbles = pt_array.PointArray(14);
 const TurnState = turn_state.TurnState;
 const Turn = turn_state.Turn;
 
-const compute_best_fit_dir = turn_state.compute_best_fit_dir;
+pub const compute_best_fit_dir = turn_state.compute_best_fit_dir;
 
 const fps = 60;
 const logical_size = 100;
@@ -205,10 +205,10 @@ pub const GameState = struct {
         }
     }
 
-    pub fn process_mousebutton_down(self: *@This(), mouse_x: f32, mouse_y: f32) void {
+    pub fn process_mousebutton_down(self: *@This(), x: f32, y: f32) void {
         switch (self.turn_state) {
             .ChoosingChain => |*mv| {
-                const moused_over = AxialVector.from_pixel_vec_screen_space(mouse_x, mouse_y, .identity);
+                const moused_over = AxialVector.from_pixel_vec(x, y);
 
                 self.redraw_requested = true;
 
@@ -247,9 +247,9 @@ pub const GameState = struct {
         }
     }
 
-    pub fn process_mouse_moved(self: *@This(), mouse_x: f32, mouse_y: f32) void {
-        const new_pos =
-            AxialVector.from_pixel_vec_screen_space(mouse_x, mouse_y, .identity).if_in_bounds();
+    pub fn process_mouse_moved(self: *@This(), x: f32, y: f32) void {
+        const new_pos = AxialVector.from_pixel_vec(x, y).if_in_bounds();
+
         if (new_pos == self.mouse_position) return;
 
         self.mouse_position = new_pos;
