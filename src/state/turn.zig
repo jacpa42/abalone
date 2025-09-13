@@ -40,13 +40,13 @@ pub const TurnState = union(TurnStateEnum) {
     };
 
     /// Trys to advance state, will fail in certain situations.
-    pub fn next(self: @This(), mouse_pos: ?AxialVector) ?@This() {
+    pub fn next(self: @This(), mouse_pos: AxialVector) ?@This() {
         switch (self) {
             .ChoosingChain => |mv| {
                 if (mv.balls.marbles.len == 0) return null;
 
                 var dir: ?Direction = null;
-                if (mouse_pos) |pos| {
+                if (mouse_pos.if_in_bounds()) |pos| {
                     dir = compute_best_fit_dir(
                         pos,
                         mv.balls.marbles.const_slice(),

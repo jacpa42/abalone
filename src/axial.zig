@@ -34,7 +34,7 @@ pub const AxialVector = packed struct {
         return 3 * bound * (bound + 1) + 1;
     }
 
-    pub fn compute_hexagons() [num_hexagons()][2]f32 {
+    pub fn compute_game_grid() [num_hexagons()][2]f32 {
         // https://en.wikipedia.org/wiki/Centered_hexagonal_number#Formula
         var hexagons: [num_hexagons()][2]f32 = undefined;
         var idx = 0;

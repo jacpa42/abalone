@@ -25,7 +25,7 @@ pub const GameState = struct {
     screen_height: f32 = inital_screen_height,
     p1: Player = .{ .marbles = pt_array.white },
     p2: Player = .{ .marbles = pt_array.black },
-    mouse_position: ?AxialVector = null,
+    mouse_position: AxialVector = .zero,
     turn_state: TurnState = .default,
 
     pub fn do_move(
@@ -248,19 +248,16 @@ pub const GameState = struct {
     }
 
     pub fn process_mouse_moved(self: *@This(), x: f32, y: f32) void {
-        const new_pos = AxialVector.from_pixel_vec(x, y).if_in_bounds();
+        const new_pos = AxialVector.from_pixel_vec(x, y);
 
         if (new_pos == self.mouse_position) return;
 
         self.mouse_position = new_pos;
         self.redraw_requested = true;
 
-        // Update the chosen direction for selected balls
-        const mp = self.mouse_position orelse return;
-
         switch (self.turn_state) {
             .ChoosingDirection => |*mv| {
-                mv.dir = compute_best_fit_dir(mp, mv.balls.marbles.const_slice()) catch null;
+                mv.dir = compute_best_fit_dir(new_pos, mv.balls.marbles.const_slice()) catch null;
             },
             else => {},
         }

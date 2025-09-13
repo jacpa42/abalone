@@ -60,9 +60,10 @@ pub fn PointArray(comptime max_cap: usize) type {
 }
 
 const Array = PointArray(14);
+
 fn black_start() Array {
     const bound = 4;
-    var array = Array{ .items = undefined, .len = 0 };
+    var array = Array.empty;
 
     var r = -bound;
     while (r <= -bound + 1) : (r += 1) {
@@ -92,7 +93,6 @@ fn white_start() Array {
     while (r >= bound - 1) : (r -= 1) {
         var q = @max(-bound, -bound - r);
         const end = @min(bound, bound - r);
-
         while (q <= end) : (q += 1) {
             array.items[array.len] = AxialVector{ .q = q, .r = r };
             array.len += 1;

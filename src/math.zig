@@ -144,14 +144,13 @@ pub const Mat4 = extern struct {
     pub fn mul(self: *const @This(), right: *const Mat4) Mat4 {
         var out: Mat4 = undefined;
 
-        // for each column of b
-        for (0..4) |i| {
-            const bx: f32x4 = @splat(self.m[i][0]);
-            const by: f32x4 = @splat(self.m[i][1]);
-            const bz: f32x4 = @splat(self.m[i][2]);
-            const bw: f32x4 = @splat(self.m[i][3]);
+        inline for (0..4) |col_idx| {
+            const bx: f32x4 = @splat(self.m[col_idx][0]);
+            const by: f32x4 = @splat(self.m[col_idx][1]);
+            const bz: f32x4 = @splat(self.m[col_idx][2]);
+            const bw: f32x4 = @splat(self.m[col_idx][3]);
 
-            out.m[i] =
+            out.m[col_idx] =
                 right.m[0] * bx +
                 right.m[1] * by +
                 right.m[2] * bz +
@@ -247,12 +246,30 @@ pub const Mat4 = extern struct {
         return res;
     }
 
-    pub fn translate(translation: Vec3) Mat4 {
-        var res = Mat4.identity;
-        res.m[3][0] = translation.x;
-        res.m[3][1] = translation.y;
-        res.m[3][2] = translation.z;
-        return res;
+    pub fn translate(vec: anytype) @This() {
+        const V = @TypeOf(vec);
+        const info = @typeInfo(V);
+        if (info != .array) @compileError("Vector must be array type");
+        if (@typeInfo(info.array.child) != .float) @compileError("Vector must be array of floating point values.");
+        if (@typeInfo(info.array.child).float.bits != 32) @compileError("Vector must be array of f32 values.");
+
+        var new = @This().identity;
+
+        switch (info.array.len) {
+            1 => new.m[3][0] = vec[0],
+            2 => {
+                new.m[3][0] = vec[0];
+                new.m[3][1] = vec[1];
+            },
+            3 => {
+                new.m[3][0] = vec[0];
+                new.m[3][1] = vec[1];
+                new.m[3][2] = vec[2];
+            },
+            else => @compileError("Unsupported vector dimension"),
+        }
+
+        return new;
     }
 };
 
