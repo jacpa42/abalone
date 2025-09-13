@@ -20,7 +20,6 @@ const inital_screen_height = 1000;
 const screen_factor = logical_size * 0.5;
 
 pub const GameState = struct {
-    redraw_requested: bool = true,
     screen_width: f32 = inital_screen_width,
     screen_height: f32 = inital_screen_height,
     p1: Player = .{ .marbles = pt_array.white },
@@ -187,12 +186,10 @@ pub const GameState = struct {
             .DELETE => sokol.app.quit(),
             .ESCAPE => {
                 self.turn_state = self.turn_state.previous();
-                self.redraw_requested = true;
             },
             .SPACE => {
                 if (self.turn_state == .ChoosingChain) {
                     self.turn_state = self.turn_state.next(self.mouse_position) orelse return;
-                    self.redraw_requested = true;
                 }
             },
 
@@ -205,12 +202,11 @@ pub const GameState = struct {
         }
     }
 
+    /// expects x and y in ndc
     pub fn process_mousebutton_down(self: *@This(), x: f32, y: f32) void {
         switch (self.turn_state) {
             .ChoosingChain => |*mv| {
                 const moused_over = AxialVector.from_pixel_vec(x, y);
-
-                self.redraw_requested = true;
 
                 if (mv.balls.try_deselect(moused_over)) return;
 
@@ -233,7 +229,6 @@ pub const GameState = struct {
                 self.do_move(mv.turn, player_move) catch return;
 
                 // on move success redraw
-                self.redraw_requested = true;
 
                 if (self.p1.score >= 6) {
                     std.log.info("Player 1 wins!", .{});
@@ -247,13 +242,13 @@ pub const GameState = struct {
         }
     }
 
+    /// expects x and y in ndc
     pub fn process_mouse_moved(self: *@This(), x: f32, y: f32) void {
         const new_pos = AxialVector.from_pixel_vec(x, y);
 
         if (new_pos == self.mouse_position) return;
 
         self.mouse_position = new_pos;
-        self.redraw_requested = true;
 
         switch (self.turn_state) {
             .ChoosingDirection => |*mv| {

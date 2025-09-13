@@ -10,6 +10,7 @@ const std = @import("std");
 const axial = @import("axial.zig");
 
 const GameState = @import("state.zig").GameState;
+const Move = @import("move.zig").Move;
 const compute_best_fit_dir = @import("state.zig").compute_best_fit_dir;
 const AxialVector = axial.AxialVector;
 
@@ -225,6 +226,41 @@ export fn init() void {
     });
 }
 
+fn draw_hexagon_at(pos: [2]f32) void {
+    sg.applyUniforms(shd.UB_vs_params, sg.asRange(&shd.VsParams{
+        .mvp = math.Mat4.translate(pos).mul(&state.model_view_projection_matrix),
+    }));
+
+    sg.draw(square_indices.len, hexagon_indices.len, 1);
+}
+
+// Todo: Do instanced rendering for this. We can have the instance buffer as streaming and then upload the positions for the hexagons, player 1 balls and then player 2 balls in that order.
+fn draw_balls(gstate: *const GameState) void {
+    var uniforms = shd.VsParams{ .mvp = state.model_view_projection_matrix };
+
+    state.bind.views[shd.VIEW_tex] = state.textures[0];
+    sg.applyBindings(state.bind);
+
+    for (gstate.p1.marbles.const_slice()) |marble| {
+        uniforms.mvp = math.Mat4.translate(marble.to_pixel_vec())
+            .mul(&state.model_view_projection_matrix);
+        sg.applyUniforms(shd.UB_vs_params, sg.asRange(&uniforms));
+
+        sg.draw(0, square_indices.len, 1);
+    }
+
+    state.bind.views[shd.VIEW_tex] = state.textures[2];
+    sg.applyBindings(state.bind);
+
+    for (gstate.p2.marbles.const_slice()) |marble| {
+        uniforms.mvp = math.Mat4.translate(marble.to_pixel_vec())
+            .mul(&state.model_view_projection_matrix);
+        sg.applyUniforms(shd.UB_vs_params, sg.asRange(&uniforms));
+
+        sg.draw(0, square_indices.len, 1);
+    }
+}
+
 export fn frame() void {
     sg.beginPass(.{
         .action = state.pass_action,
@@ -249,37 +285,38 @@ export fn frame() void {
 
     // Draw the hexagon which the user is mousing over
     {
-        uniforms.mvp = math.Mat4.translate(state.game_state.mouse_position.to_pixel_vec()).mul(&uniforms.mvp);
-        sg.applyUniforms(shd.UB_vs_params, sg.asRange(&uniforms));
-
         state.bind.views[shd.VIEW_tex] = state.active_color_tex;
         sg.applyBindings(state.bind);
-
-        sg.draw(square_indices.len, hexagon_indices.len, 1);
+        draw_hexagon_at(state.game_state.mouse_position.to_pixel_vec());
     }
 
     // Draw the balls with textures
     {
-        for (state.game_state.p1.marbles.const_slice()) |marble| {
-            uniforms.mvp = math.Mat4.translate(marble.to_pixel_vec())
-                .mul(&state.model_view_projection_matrix);
-            sg.applyUniforms(shd.UB_vs_params, sg.asRange(&uniforms));
+        switch (state.game_state.turn_state) {
+            // If we are choosing a chain, render each selected tile with the active_color_tex
+            .ChoosingChain => |*data| {
+                state.bind.views[shd.VIEW_tex] = state.active_color_tex;
+                sg.applyBindings(state.bind);
 
-            state.bind.views[shd.VIEW_tex] = state.textures[0];
-            sg.applyBindings(state.bind);
+                for (data.balls.marbles.const_slice()) |marble| draw_hexagon_at(marble.to_pixel_vec());
+                draw_balls(&state.game_state);
+            },
+            // If we are picking a direction then we simulate the move if any on the copy of the game state
+            .ChoosingDirection => |*data| {
 
-            sg.draw(0, square_indices.len, 1);
-        }
+                // Simulate the move with a copy of the game state
 
-        for (state.game_state.p2.marbles.const_slice()) |marble| {
-            uniforms.mvp = math.Mat4.translate(marble.to_pixel_vec())
-                .mul(&state.model_view_projection_matrix);
-            sg.applyUniforms(shd.UB_vs_params, sg.asRange(&uniforms));
-
-            state.bind.views[shd.VIEW_tex] = state.textures[2];
-            sg.applyBindings(state.bind);
-
-            sg.draw(0, square_indices.len, 1);
+                if (data.dir) |mv_dir| {
+                    var copy_of_game_state = state.game_state;
+                    const player_move = Move.new(data.balls.marbles.const_slice(), mv_dir);
+                    copy_of_game_state.do_move(data.turn, player_move) catch |e| {
+                        std.log.warn("Failed to simulate move: {}", .{e});
+                    };
+                    draw_balls(&copy_of_game_state);
+                } else {
+                    draw_balls(&state.game_state);
+                }
+            },
         }
     }
 
