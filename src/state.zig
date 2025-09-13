@@ -20,7 +20,7 @@ const inital_screen_height = 1000;
 const screen_factor = logical_size * 0.5;
 
 pub const GameState = struct {
-    p1: Player = .{ .score = 5, .marbles = pt_array.white },
+    p1: Player = .{ .marbles = pt_array.white },
     p2: Player = .{ .marbles = pt_array.black },
     mouse_position: AxialVector = .zero,
     turn_state: TurnState = .default,
