@@ -136,6 +136,8 @@ pub const GameState = struct {
 
                 for (mv.chain) |pt| std.debug.assert(pt != r1);
 
+                if (marbles.contains(r1)) return error.CannotPushSelf;
+
                 if (enemy_marbles.find(r1)) |enemy_idx| {
                     if (enemy_marbles.contains(r2)) {
                         // [enemy enemy x]
@@ -169,7 +171,7 @@ pub const GameState = struct {
                         const friend_idx = marbles.find(mv.chain[2]) orelse unreachable;
                         marbles.items[friend_idx] = r1;
                     }
-                } else if (!marbles.contains(r1)) {
+                } else {
                     // [x]
                     // move friend to r1
                     const friend_idx = marbles.find(mv.chain[2]) orelse unreachable;
@@ -221,9 +223,8 @@ pub const GameState = struct {
                 const mv_dir = mv.dir orelse return;
                 const player_move = move.Move.new(mv.balls.marbles.const_slice(), mv_dir);
 
-                self.do_move(mv.turn, player_move) catch return;
-
-                // on move success redraw
+                const move_out = self.do_move(mv.turn, player_move);
+                move_out catch return;
 
                 if (self.p1.score >= 6) {
                     std.log.info("Player 1 wins!", .{});

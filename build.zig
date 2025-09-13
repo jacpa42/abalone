@@ -45,6 +45,8 @@ fn build_web(
         .root_module = abalone_mod,
     });
 
+    const shell_fpath = "src/shell.html";
+
     // create a build step which invokes the Emscripten linker
     const emsdk = dep_sokol.builder.dependency("emsdk", .{});
     const link_step = try sokol.emLinkStep(b, .{
@@ -55,7 +57,8 @@ fn build_web(
         .use_webgl2 = true,
         .use_emmalloc = true,
         .use_filesystem = false,
-        .shell_file_path = dep_sokol.path("src/sokol/web/shell.html"),
+        .use_webgpu = true,
+        .shell_file_path = b.path(shell_fpath),
     });
     // attach Emscripten linker output to default install step
     b.getInstallStep().dependOn(&link_step.step);

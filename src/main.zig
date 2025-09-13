@@ -20,8 +20,8 @@ pub fn main() error{ SdlError, StateInitError }!void {
         .frame_cb = frame,
         .cleanup_cb = cleanup,
         .event_cb = input,
-        .width = 500,
-        .height = 500,
+        .width = 1280,
+        .height = 1280,
         .alpha = true,
         .icon = .{ .sokol_default = true },
         .window_title = "triangle.zig",
@@ -37,6 +37,9 @@ const state = struct {
     var default_color_tex: sg.View = .{};
     var active_color_tex: sg.View = .{};
     var textures: [4]sg.View = .{sg.View{}} ** 4;
+
+    /// msaa sampling
+    const sample_count = 8;
 
     /// The ndc coordinates of the mouse cursor
     var mouse_position = [_]f32{ 0, 0 };
@@ -91,9 +94,6 @@ export fn init() void {
         "textures/red_heart.qoi",
     };
 
-    var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
-    defer arena.deinit();
-
     state.default_color_tex = sg.makeView(.{ .texture = .{
         .image = sg.makeImage(.{
             .pixel_format = .RGBA8,
@@ -120,6 +120,9 @@ export fn init() void {
             },
         }),
     } });
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+    defer arena.deinit();
 
     inline for (texture_paths, &state.textures) |path, *tex| {
         const image_bytes = @embedFile(path);
@@ -229,6 +232,7 @@ export fn init() void {
             };
             break :init colors;
         },
+        .sample_count = state.sample_count,
         .index_type = .UINT16,
     });
 }
@@ -269,9 +273,12 @@ fn draw_balls(gstate: *const GameState) void {
 }
 
 export fn frame() void {
+    var swapchain = sglue.swapchain();
+    swapchain.sample_count = state.sample_count;
+
     sg.beginPass(.{
         .action = state.pass_action,
-        .swapchain = sglue.swapchain(),
+        .swapchain = swapchain,
     });
 
     sg.applyPipeline(state.pip);
@@ -310,6 +317,8 @@ export fn frame() void {
             },
             // If we are picking a direction then we simulate the move if any on the copy of the game state
             .ChoosingDirection => |*data| {
+                for (data.balls.marbles.const_slice()) |marble| draw_hexagon_at(marble.to_pixel_vec());
+
                 if (data.dir) |mv_dir| {
                     // Simulate the move with a copy of the game state
                     var copy_of_game_state = state.game_state;
@@ -330,9 +339,11 @@ export fn frame() void {
     {
         var scale = math.Mat4.diag(0.5);
         scale.m[3][3] = 1;
+
         uniforms.mvp = scale.mul(
             &math.Mat4.translate(state.mouse_position),
         ).mul(&state.model_view_projection_matrix);
+
         sg.applyUniforms(shd.UB_vs_params, sg.asRange(&uniforms));
 
         const texture_idx: usize = if (state.game_state.turn_state.get_turn() == .p1) 1 else 3;
