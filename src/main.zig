@@ -35,7 +35,6 @@ const state = struct {
     var bind: sg.Bindings = .{};
     var pip: sg.Pipeline = .{};
     var default_color_tex: sg.View = .{};
-    var active_color_tex: sg.View = .{};
     var textures: [4]sg.View = .{sg.View{}} ** 4;
 
     /// msaa sampling
@@ -101,21 +100,7 @@ export fn init() void {
             .width = 1,
             .data = init: {
                 var data = sg.ImageData{};
-                data.subimage[0][0] = sg.asRange(&[_]u8{ 0xe8, 0x24, 0x24, 0xff });
-                break :init data;
-            },
-        }),
-    } });
-
-    state.active_color_tex = sg.makeView(.{ .texture = .{
-        .image = sg.makeImage(.{
-            .pixel_format = .RGBA8,
-            .height = 1,
-            .width = 1,
-            .data = init: {
-                var data = sg.ImageData{};
-                data.subimage[0][0] = sg.asRange(&[_]u8{ 0x7a, 0xa7, 0x9f, 0xff });
-
+                data.subimage[0][0] = sg.asRange(&[_]u8{ 0xd2, 0x0f, 0x39, 0xff });
                 break :init data;
             },
         }),
@@ -168,26 +153,38 @@ export fn init() void {
             // hexagon
             .{ .x = 0, .y = 0 },
             .{
+                .tex_x = @cos(0 * theta + offset),
+                .tex_y = @sin(0 * theta + offset),
                 .x = r * hexscale * @cos(0 * theta + offset),
                 .y = r * hexscale * @sin(0 * theta + offset),
             },
             .{
+                .tex_x = @cos(0 * theta + offset),
+                .tex_y = @sin(0 * theta + offset),
                 .x = r * hexscale * @cos(1 * theta + offset),
                 .y = r * hexscale * @sin(1 * theta + offset),
             },
             .{
+                .tex_x = @cos(0 * theta + offset),
+                .tex_y = @sin(0 * theta + offset),
                 .x = r * hexscale * @cos(2 * theta + offset),
                 .y = r * hexscale * @sin(2 * theta + offset),
             },
             .{
+                .tex_x = @cos(0 * theta + offset),
+                .tex_y = @sin(0 * theta + offset),
                 .x = r * hexscale * @cos(3 * theta + offset),
                 .y = r * hexscale * @sin(3 * theta + offset),
             },
             .{
+                .tex_x = @cos(0 * theta + offset),
+                .tex_y = @sin(0 * theta + offset),
                 .x = r * hexscale * @cos(4 * theta + offset),
                 .y = r * hexscale * @sin(4 * theta + offset),
             },
             .{
+                .tex_x = @cos(0 * theta + offset),
+                .tex_y = @sin(0 * theta + offset),
                 .x = r * hexscale * @cos(5 * theta + offset),
                 .y = r * hexscale * @sin(5 * theta + offset),
             },
@@ -299,7 +296,8 @@ export fn frame() void {
 
     // Draw the hexagon which the user is mousing over
     {
-        state.bind.views[shd.VIEW_tex] = state.active_color_tex;
+        const texture_idx: usize = if (state.game_state.turn_state.get_turn() == .p1) 0 else 2;
+        state.bind.views[shd.VIEW_tex] = state.textures[texture_idx];
         sg.applyBindings(state.bind);
         draw_hexagon_at(state.game_state.mouse_position.to_pixel_vec());
     }
@@ -309,9 +307,6 @@ export fn frame() void {
         switch (state.game_state.turn_state) {
             // If we are choosing a chain, render each selected tile with the active_color_tex
             .ChoosingChain => |*data| {
-                state.bind.views[shd.VIEW_tex] = state.active_color_tex;
-                sg.applyBindings(state.bind);
-
                 for (data.balls.marbles.const_slice()) |marble| draw_hexagon_at(marble.to_pixel_vec());
                 draw_balls(&state.game_state);
             },

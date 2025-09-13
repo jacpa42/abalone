@@ -55,6 +55,7 @@ pub const GameState = struct {
                 const i = marbles.find(mv.chain[0]) orelse unreachable;
                 marbles.items[i] = marble;
             },
+
             .Broadside2 => {
                 const moved: [2]AxialVector = .{
                     mv.chain[0].add(move_vec),
@@ -72,6 +73,7 @@ pub const GameState = struct {
                     marbles.items[i] = moved_marble;
                 }
             },
+
             .Broadside3 => {
                 const moved: [3]AxialVector = .{
                     mv.chain[0].add(move_vec),
@@ -127,6 +129,7 @@ pub const GameState = struct {
                     return;
                 }
             },
+
             .Inline3 => {
                 const r1 = mv.chain[0].add(move_vec);
                 if (r1.out_of_bounds()) return error.OutOfBounds;
@@ -185,11 +188,9 @@ pub const GameState = struct {
         switch (key) {
             .DELETE => sokol.app.quit(),
             .SPACE => {
-                if (self.turn_state == .ChoosingChain) {
-                    self.turn_state = self.turn_state.next(self.mouse_position) orelse return;
-                }
+                if (self.turn_state != .ChoosingChain) return;
+                self.turn_state = self.turn_state.next(self.mouse_position) orelse return;
             },
-
             .R => {
                 self.p1 = .{ .marbles = pt_array.white };
                 self.p2 = .{ .marbles = pt_array.black };
