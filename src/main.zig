@@ -14,17 +14,14 @@ const Move = @import("move.zig").Move;
 const compute_best_fit_dir = @import("state.zig").compute_best_fit_dir;
 const AxialVector = axial.AxialVector;
 
-const inital_window_width = 680;
-const inital_window_height = 480;
-
 pub fn main() error{ SdlError, StateInitError }!void {
     sokol.app.run(.{
         .init_cb = init,
         .frame_cb = frame,
         .cleanup_cb = cleanup,
         .event_cb = input,
-        .width = inital_window_width,
-        .height = inital_window_height,
+        .width = 500,
+        .height = 500,
         .alpha = true,
         .icon = .{ .sokol_default = true },
         .window_title = "triangle.zig",
@@ -44,14 +41,12 @@ const state = struct {
     /// The ndc coordinates of the mouse cursor
     var mouse_position = [_]f32{ 0, 0 };
 
-    var screen_width: f32 = inital_window_width;
-    var screen_height: f32 = inital_window_height;
+    var screen_width: f32 = undefined;
+    var screen_height: f32 = undefined;
 
     var hexagon_instances = AxialVector.compute_game_grid();
 
-    var model_view_projection_matrix: math.Mat4 = compute_mvp_matrix(
-        inital_window_width / inital_window_height,
-    );
+    var model_view_projection_matrix: math.Mat4 = undefined;
 };
 
 const Vertex = extern struct {
@@ -81,6 +76,10 @@ export fn init() void {
         .environment = sglue.environment(),
         .logger = .{ .func = slog.func },
     });
+
+    state.screen_width = sapp.widthf();
+    state.screen_height = sapp.heightf();
+    state.model_view_projection_matrix = compute_mvp_matrix(state.screen_width / state.screen_height);
 
     // Hide the mouse cursor
     sokol.app.showMouse(false);
