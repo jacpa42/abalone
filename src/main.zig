@@ -41,11 +41,16 @@ const state = struct {
     var active_color_tex: sg.View = .{};
     var textures: [4]sg.View = .{sg.View{}} ** 4;
 
+    /// The ndc coordinates of the mouse cursor
+    var mouse_position = [_]f32{ 0, 0 };
+
+    var screen_width: f32 = inital_window_width;
+    var screen_height: f32 = inital_window_height;
+
     var hexagon_instances = AxialVector.compute_game_grid();
 
     var model_view_projection_matrix: math.Mat4 = compute_mvp_matrix(
-        @as(f32, @floatFromInt(inital_window_width)) /
-            @as(f32, @floatFromInt(inital_window_height)),
+        inital_window_width / inital_window_height,
     );
 };
 
@@ -76,6 +81,9 @@ export fn init() void {
         .environment = sglue.environment(),
         .logger = .{ .func = slog.func },
     });
+
+    // Hide the mouse cursor
+    sokol.app.showMouse(false);
 
     const texture_paths = [_][]const u8{
         "textures/blue_ball.qoi",
@@ -303,21 +311,36 @@ export fn frame() void {
             },
             // If we are picking a direction then we simulate the move if any on the copy of the game state
             .ChoosingDirection => |*data| {
-
-                // Simulate the move with a copy of the game state
-
                 if (data.dir) |mv_dir| {
+                    // Simulate the move with a copy of the game state
                     var copy_of_game_state = state.game_state;
                     const player_move = Move.new(data.balls.marbles.const_slice(), mv_dir);
                     copy_of_game_state.do_move(data.turn, player_move) catch |e| {
                         std.log.warn("Failed to simulate move: {}", .{e});
                     };
+
                     draw_balls(&copy_of_game_state);
                 } else {
                     draw_balls(&state.game_state);
                 }
             },
         }
+    }
+
+    // Draw correct color heart at mouse position
+    {
+        var scale = math.Mat4.diag(0.5);
+        scale.m[3][3] = 1;
+        uniforms.mvp = scale.mul(
+            &math.Mat4.translate(state.mouse_position),
+        ).mul(&state.model_view_projection_matrix);
+        sg.applyUniforms(shd.UB_vs_params, sg.asRange(&uniforms));
+
+        const texture_idx: usize = if (state.game_state.turn_state.get_turn() == .p1) 1 else 3;
+        state.bind.views[shd.VIEW_tex] = state.textures[texture_idx];
+        sg.applyBindings(state.bind);
+
+        sg.draw(0, square_indices.len, 1);
     }
 
     sg.endPass();
@@ -335,32 +358,23 @@ export fn input(event: ?*const sokol.app.Event) void {
         },
 
         .MOUSE_DOWN => {
-            var mvp_inv: math.Mat4 = state.model_view_projection_matrix.inverse();
-
-            const ndc_x = 2.0 * (ev.mouse_x / state.game_state.screen_width) - 1.0;
-            const ndc_y = 2.0 * (ev.mouse_y / state.game_state.screen_height) - 1.0;
-
-            const adjusted_mouse_pos = mvp_inv.vecmul([_]f32{ ndc_x, ndc_y });
-
-            state.game_state.process_mousebutton_down(adjusted_mouse_pos[0], adjusted_mouse_pos[1]);
+            if (ev.mouse_button == .RIGHT) {
+                state.game_state.turn_state = state.game_state.turn_state.previous();
+            } else {
+                state.game_state.process_leftmousebutton_down(state.mouse_position);
+            }
         },
 
         .MOUSE_MOVE => {
-            var mvp_inv: math.Mat4 = state.model_view_projection_matrix.inverse();
-
-            const ndc_x = 2.0 * (ev.mouse_x / state.game_state.screen_width) - 1.0;
-            const ndc_y = 2.0 * (ev.mouse_y / state.game_state.screen_height) - 1.0;
-
-            const adjusted_mouse_pos = mvp_inv.vecmul([_]f32{ ndc_x, ndc_y });
-
-            state.game_state.process_mouse_moved(adjusted_mouse_pos[0], adjusted_mouse_pos[1]);
+            const ndc = compute_ndc_mouse_pos(ev.mouse_x, ev.mouse_y);
+            state.game_state.process_mouse_moved(ndc);
         },
 
         .RESIZED => {
-            state.game_state.screen_height = @floatFromInt(ev.window_height);
-            state.game_state.screen_width = @floatFromInt(ev.window_width);
+            state.screen_height = @floatFromInt(ev.window_height);
+            state.screen_width = @floatFromInt(ev.window_width);
             state.model_view_projection_matrix = compute_mvp_matrix(
-                state.game_state.screen_width / state.game_state.screen_height,
+                state.screen_width / state.screen_height,
             );
         },
         else => return,
@@ -372,9 +386,22 @@ export fn cleanup() void {
 }
 
 fn compute_mvp_matrix(aspect_ratio: f32) math.Mat4 {
+    const perspective = math.Mat4.persp(90, aspect_ratio, 0.1, 10);
     return math.Mat4.lookat(
         .{ .x = 0, .y = 0, .z = 1 }, // eye
         .{ .x = 0, .y = 0, .z = 0 }, // center
         .{ .x = 0, .y = 1, .z = 0 }, // up
-    ).mul(&math.Mat4.persp(90, aspect_ratio, 0.1, 10));
+    ).mul(&perspective);
+}
+
+/// Expects mouse_x and mouse_y in pixel coordinates
+fn compute_ndc_mouse_pos(mouse_x: f32, mouse_y: f32) [2]f32 {
+    var mvp_inv: math.Mat4 = state.model_view_projection_matrix.inverse();
+
+    state.mouse_position = mvp_inv.vecmul([_]f32{
+        2.0 * (mouse_x / state.screen_width) - 1.0,
+        1.0 - 2.0 * (mouse_y / state.screen_height),
+    });
+
+    return state.mouse_position;
 }

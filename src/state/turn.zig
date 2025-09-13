@@ -39,6 +39,13 @@ pub const TurnState = union(TurnStateEnum) {
         .ChoosingChain = .{ .turn = .p1, .balls = .{} },
     };
 
+    pub fn get_turn(self: *const @This()) Turn {
+        switch (self.*) {
+            .ChoosingChain => |*data| return data.turn,
+            .ChoosingDirection => |*data| return data.turn,
+        }
+    }
+
     /// Trys to advance state, will fail in certain situations.
     pub fn next(self: @This(), mouse_pos: AxialVector) ?@This() {
         switch (self) {

@@ -189,8 +189,8 @@ pub const Mat4 = extern struct {
     pub fn persp(fov: f32, aspect: f32, near: f32, far: f32) Mat4 {
         var res = Mat4.identity;
         const t = std.math.tan(fov * (std.math.pi / 360.0));
-        res.m[0][0] = 1.0 / t;
-        res.m[1][1] = aspect / t;
+        res.m[0][0] = 1.0 / (t * aspect); // horizontal
+        res.m[1][1] = 1.0 / t; // vertical
         res.m[2][3] = -1.0;
         res.m[2][2] = (near + far) / (near - far);
         res.m[3][2] = (2.0 * near * far) / (near - far);

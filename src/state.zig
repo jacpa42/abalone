@@ -20,8 +20,6 @@ const inital_screen_height = 1000;
 const screen_factor = logical_size * 0.5;
 
 pub const GameState = struct {
-    screen_width: f32 = inital_screen_width,
-    screen_height: f32 = inital_screen_height,
     p1: Player = .{ .marbles = pt_array.white },
     p2: Player = .{ .marbles = pt_array.black },
     mouse_position: AxialVector = .zero,
@@ -184,9 +182,6 @@ pub const GameState = struct {
     pub fn process_keydown(self: *@This(), key: sokol.app.Keycode) void {
         switch (key) {
             .DELETE => sokol.app.quit(),
-            .ESCAPE => {
-                self.turn_state = self.turn_state.previous();
-            },
             .SPACE => {
                 if (self.turn_state == .ChoosingChain) {
                     self.turn_state = self.turn_state.next(self.mouse_position) orelse return;
@@ -203,10 +198,10 @@ pub const GameState = struct {
     }
 
     /// expects x and y in ndc
-    pub fn process_mousebutton_down(self: *@This(), x: f32, y: f32) void {
+    pub fn process_leftmousebutton_down(self: *@This(), pos: [2]f32) void {
         switch (self.turn_state) {
             .ChoosingChain => |*mv| {
-                const moused_over = AxialVector.from_pixel_vec(x, y);
+                const moused_over = AxialVector.from_pixel_vec(pos);
 
                 if (mv.balls.try_deselect(moused_over)) return;
 
@@ -243,8 +238,8 @@ pub const GameState = struct {
     }
 
     /// expects x and y in ndc
-    pub fn process_mouse_moved(self: *@This(), x: f32, y: f32) void {
-        const new_pos = AxialVector.from_pixel_vec(x, y);
+    pub fn process_mouse_moved(self: *@This(), pos: [2]f32) void {
+        const new_pos = AxialVector.from_pixel_vec(pos);
 
         if (new_pos == self.mouse_position) return;
 

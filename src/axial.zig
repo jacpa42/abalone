@@ -26,7 +26,7 @@ pub const AxialVector = packed struct {
         const q = @as(f32, @floatFromInt(self.q));
         const r = @as(f32, @floatFromInt(self.r));
 
-        return .{ radius * root3 * (q + r * 0.5), -radius * 1.5 * r };
+        return .{ radius * root3 * (q + r * 0.5), radius * 1.5 * r };
     }
 
     /// https://en.wikipedia.org/wiki/Centered_hexagonal_number#Formula
@@ -67,11 +67,11 @@ pub const AxialVector = packed struct {
     /// The `radius` parameter is the radius of the maximal circle inscribed in the hexagon.
     ///
     /// [https://www.redblobgames.com/grids/hexagons/#pixel-to-hex]
-    pub fn from_pixel_vec(x: f32, y: f32) @This() {
+    pub fn from_pixel_vec(pos: [2]f32) @This() {
         const r3 = 1.0 / (3.0 * radius);
 
-        const q = (root3 * x - y) * r3;
-        const r = (y + y) * r3;
+        const q = (root3 * pos[0] - pos[1]) * r3;
+        const r = (2.0 * pos[1]) * r3;
 
         return .{
             .q = @intFromFloat(@round(q)),
