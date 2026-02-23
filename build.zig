@@ -28,14 +28,14 @@ pub fn build(b: *Build) void {
     });
 
     if (target.result.cpu.arch.isWasm()) {
-        try build_web(b, abalone_mod, dep_sokol);
+        try buildForWeb(b, abalone_mod, dep_sokol);
     } else {
-        try build_native(b, abalone_mod, dep_sokol);
+        try buildForNative(b, abalone_mod, dep_sokol);
     }
 }
 
 // this is the regular build for all native platforms, nothing surprising here
-fn build_web(
+fn buildForWeb(
     b: *Build,
     abalone_mod: *Build.Module,
     dep_sokol: *Build.Dependency,
@@ -68,7 +68,7 @@ fn build_web(
     b.step("run", "Run the game :)").dependOn(&run.step);
 }
 
-fn build_native(
+fn buildForNative(
     b: *Build,
     abalone_mod: *Build.Module,
     dep_sokol: *Build.Dependency,
